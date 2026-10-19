@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Octagon Pick'em</title>
+<meta name="description" content="A UFC pick'em league for friends: pick every fight, lock one each week, track the standings.">
+<meta name="theme-color" content="#15171C">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpolygon points='10,2 22,2 30,10 30,22 22,30 10,30 2,22 2,10' fill='%2315171C' stroke='%23C21F32' stroke-width='2'/%3E%3Ctext x='16' y='21' font-family='Arial' font-weight='900' font-size='13' fill='%23E0B154' text-anchor='middle'%3EOP%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="band">
+  <div class="wrap">
+    <h1 class="brand"><small>Friends fight league</small>Octagon Pick'em</h1>
+    <div class="me" id="me" hidden></div>
+    <nav class="tabs" role="tablist" id="tabs" hidden>
+      <button class="tab" role="tab" data-tab="picks" aria-selected="true">Picks</button>
+      <button class="tab" role="tab" data-tab="board" aria-selected="false">Standings</button>
+    </nav>
+  </div>
+</header>
+<div class="wrap"><main id="app">
+  <div class="empty"><h3>Loading</h3><p>Connecting to your league.</p></div>
+</main></div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
