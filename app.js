@@ -8,7 +8,7 @@ const sb = window.supabase.createClient(window.OP_CONFIG.supabaseUrl, window.OP_
 const S = {
   session: null, uid: null,
   cards: [], profiles: {}, picks: [], locks: [],
-  tab: "picks", cardId: null, authMode: "signin", loaded: false
+  tab: "picks", cardId: null, authMode: "signin", loaded: false, viewUser: null
 };
 try { const t = localStorage.getItem("op-tab"); if (t === "picks" || t === "board") S.tab = t; } catch (e) {}
 
@@ -261,7 +261,7 @@ function crowdHTML(c,f){
   S.picks.filter(p=>p.card_id===c.id && p.fight_id===f.id).forEach(p=>(p.side==="red"?red:blue).push(p.user_id));
   const n = red.length+blue.length;
   if(!n) return `<div class="crowd"><span class="note">Nobody picked this one.</span></div>`;
-  const desc = id => `<span><b>${esc(nameOf(id))}</b>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
+  const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${esc(nameOf(id))}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
   return `<div class="crowd"><span class="label">League picks · ${red.length}–${blue.length}</span>
     <div class="bar" aria-hidden="true"><i style="width:${red.length/n*100}%;background:var(--red)"></i><i style="width:${blue.length/n*100}%;background:var(--blue)"></i></div>
     <div class="who"><span style="color:var(--red)">${esc(f.red)}:</span>${red.map(desc).join("")||"<span>none</span>"}</div>
@@ -269,6 +269,7 @@ function crowdHTML(c,f){
 }
 
 function boardHTML(){
+  if(S.viewUser) return playerHTML(S.viewUser);
   const rows = standings();
   if(!rows.length) return emptyHTML("No one's on the board yet","Make a pick to join. Standings fill in as results come in.");
   let h = `<div class="event-head"><h2>Season standings</h2><span class="label">${rows.length} ${rows.length===1?"player":"players"}</span></div>`;
@@ -276,17 +277,67 @@ function boardHTML(){
   h += `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
   rows.forEach((r,i)=>{
     h += `<tr class="${i===0&&r.w>0?"top":""}"><td class="rk">${i+1}</td>
-      <td class="nm"><div>${avatar(r.id)}<span>${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span></div></td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span>${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
-  h += `</tbody></table></div><p class="note">Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
+  h += `</tbody></table></div><p class="note">Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
+  return h;
+}
+
+function cardRecord(uid, c){
+  let w=0,l=0;
+  (c.fights||[]).forEach(f=>{ const g=grade(pickOf(uid,c.id,f.id),f); if(g===1) w++; else if(g===0) l++; });
+  return {w,l};
+}
+function playerHTML(uid){
+  const me = uid===S.uid;
+  const r = standings().find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0};
+  let h = `<button class="backbtn" data-act="back">‹ Standings</button>
+    <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${esc(nameOf(uid))}${me?" (you)":""}</h2>
+      <div class="pstats"><span><b>${r.w}–${r.l}</b> picks</span><span class="lk-stat"><b>${r.lw}–${r.ll}</b> locks</span></div></div></div>`;
+  const c = currentCard();
+  if(!c) return h + emptyHTML("No cards yet","Their picks will show up here once a card is posted.");
+
+  // card-by-card record
+  const past = S.cards.filter(x=>cardLocked(x));
+  if(past.length){
+    h += `<div class="cardhist">${past.map(x=>{
+      const cr = cardRecord(uid,x), L = lockInfo(uid,x);
+      const lk = L ? (L.hit===null?"lock pending":L.hit==="push"?"lock push":L.hit?"lock hit":"lock missed") : "no lock";
+      return `<button class="ch ${x.id===c.id?"on":""}" data-act="pcard" data-card="${esc(x.id)}"><span class="ch-n">${esc(x.name)}</span><span class="ch-r">${cr.w}–${cr.l} · ${lk}</span></button>`;
+    }).join("")}</div>`;
+  }
+
+  h += `<div class="cardpick"><div class="event-head"><h2>${esc(c.name)}</h2>${c.date?`<span class="label">${esc(fmtDate(c.date))}</span>`:""}</div>${cardSelect()}</div>`;
+  if(!me && !cardLocked(c)){
+    return h + `<div class="empty"><h3>Picks are hidden</h3><p>${esc(nameOf(uid))}'s picks for this card unlock when the first fight starts${c.lock_at?`, ${esc(fmtLockAt(c))}`:""}. No peeking.</p></div>`;
+  }
+  const fights = c.fights||[];
+  const L = lockInfo(uid,c);
+  const cr = cardRecord(uid,c);
+  h += `<p class="note">${cr.w+cr.l?`${cr.w}–${cr.l} on this card. `:""}${L?`Lock: ${esc(L.side==="red"?L.f.red:L.f.blue)}${L.hit===null?"":L.hit==="push"?" (push)":L.hit?" (hit)":" (missed)"}.`:"No lock on this card."}</p>`;
+  h += `<div class="plist">`;
+  fights.forEach(f=>{
+    const p = pickOf(uid,c.id,f.id);
+    const off = isOff(f);
+    const g = grade(p,f);
+    const res = f.res && f.res.w;
+    const mark = off ? "" : res==="draw" ? "P" : (g===null ? "" : (g?"W":"L"));
+    const isLock = L && L.f.id===f.id;
+    const side = s => `<span class="pf ${s} ${p===s?"chosen":""} ${res===s?"winner":""}">${esc(s==="red"?f.red:f.blue)}</span>`;
+    h += `<div class="prow ${off?"off":""}">
+      <div class="pnames">${side("red")}<span class="vs">vs</span>${side("blue")}</div>
+      <div class="pright">${isLock?'<span class="lk">LOCK</span>':""}${off?'<span class="pill locked">Cancelled</span>':!p?'<span class="note">No pick</span>':mark?`<span class="pts ${mark==="W"?"hit":mark==="L"?"miss":""}">${mark}</span>`:'<span class="note">Pending</span>'}</div>
+    </div>`;
+  });
+  h += `</div>`;
   return h;
 }
 
 /* ---------- events ---------- */
 $("#tabs").addEventListener("click", e=>{
   const t=e.target.closest(".tab"); if(!t) return;
-  S.tab=t.dataset.tab; try{ localStorage.setItem("op-tab",S.tab); }catch(err){} render();
+  S.tab=t.dataset.tab; S.viewUser=null; try{ localStorage.setItem("op-tab",S.tab); }catch(err){} render();
 });
 $("#me").addEventListener("click", async e=>{
   if(e.target.closest('[data-act="signout"]')){ await sb.auth.signOut(); }
@@ -298,6 +349,9 @@ $("#app").addEventListener("click", e=>{
   const b=e.target.closest("[data-act]"); if(!b || b.disabled) return;
   const act=b.dataset.act;
   if(act==="mode"){ S.authMode=b.dataset.v; render(); return; }
+  if(act==="player"){ S.viewUser=b.dataset.uid; S.tab="board"; render(); window.scrollTo(0,0); return; }
+  if(act==="back"){ S.viewUser=null; render(); return; }
+  if(act==="pcard"){ S.cardId=b.dataset.card; render(); return; }
   const c=currentCard(); if(!c) return;
   const f=(c.fights||[]).find(x=>x.id===b.dataset.fight); if(!f) return;
   if(act==="pick") setPick(c,f,b.dataset.v);
