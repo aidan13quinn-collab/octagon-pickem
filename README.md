@@ -1,4 +1,4 @@
-# Octagon Pick'em
+# Fight Week
 
 A UFC pick'em league for friends. Everyone picks a winner in every fight on the card and marks one pick per week as their lock. Standings show each player's pick record and lock record.
 
