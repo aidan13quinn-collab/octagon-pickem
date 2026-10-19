@@ -143,6 +143,7 @@ function render(){
   if(signedIn){
     $("#me").innerHTML = `<span class="who-am-i">${avatar(S.uid)}<span id="me-name"></span></span><button class="linkbtn" data-act="signout">Sign out</button>`;
     $("#me-name").textContent = nameOf(S.uid);
+    if(S.loaded) $("#me-name").insertAdjacentHTML("afterbegin", crown(S.uid));
     document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected", String(t.dataset.tab===S.tab)));
   }
   preserve(()=>{
@@ -346,13 +347,29 @@ function boardHTML(){
   h += `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
   rows.forEach((r,i)=>{
     h += `<tr class="${i===0&&r.w>0?"top":""}"><td class="rk">${i+1}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id)}</span><span class="chev" aria-hidden="true">›</span></button></td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${crown(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id)}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
-  h += `</tbody></table></div><p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
+  h += `</tbody></table></div>${(()=>{ const W=lastWinners(); return W.card && W.ids.size ? `<p class="note crownnote"><span class="crown">${crownSVG}</span> ${W.ids.size>1?"Tied for the win":"Won"} ${esc(W.card.name)} with ${W.best} correct.</p>` : ""; })()}<p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
   return h;
 }
 
+// last week's winner(s): most correct picks on the most recent fully graded card; ties all get a crown
+function lastWinners(){
+  const done = S.cards.filter(c=>(c.fights||[]).length && c.fights.every(f=>f.res && f.res.w))
+    .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  if(!done.length) return { card:null, ids:new Set() };
+  const c = done[0];
+  let best = 0; const recs = {};
+  players().forEach(id=>{ const r = cardRecord(id,c); recs[id]=r; if(r.w>best) best=r.w; });
+  const ids = new Set(best>0 ? Object.keys(recs).filter(id=>recs[id].w===best) : []);
+  return { card:c, ids, best };
+}
+const crownSVG = `<svg viewBox="0 0 24 18" width="18" height="14" aria-hidden="true"><path d="M2 15 L1 4 L7 9 L12 1 L17 9 L23 4 L22 15 Z" fill="currentColor"/><rect x="2" y="15.5" width="20" height="2.5" rx="1" fill="currentColor"/></svg>`;
+function crown(uid){
+  const W = lastWinners();
+  return W.ids.has(uid) ? `<span class="crown" title="Won ${esc(W.card.name)}">${crownSVG}</span>` : "";
+}
 function cardRecord(uid, c){
   let w=0,l=0;
   (c.fights||[]).forEach(f=>{ const g=grade(pickOf(uid,c.id,f.id),f); if(g===1) w++; else if(g===0) l++; });
@@ -362,7 +379,7 @@ function playerHTML(uid){
   const me = uid===S.uid;
   const r = standings().find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0};
   let h = `<button class="backbtn" data-act="back">‹ Standings</button>
-    <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${esc(nameOf(uid))}${me?" (you)":""}</h2>
+    <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${crown(uid)}${esc(nameOf(uid))}${me?" (you)":""}</h2>
       <div class="pstats"><span><b>${r.w}–${r.l}</b> picks</span><span class="lk-stat"><b>${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
   const c = currentCard();
   if(!c) return h + emptyHTML("No cards yet","Their picks will show up here once a card is posted.");
