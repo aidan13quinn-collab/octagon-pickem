@@ -265,3 +265,43 @@ img{max-width:100%}
 .pmeta h2 .crown{vertical-align:2px}
 .crownnote{display:flex;align-items:center;gap:6px;color:var(--ink);font-weight:600}
 .crownnote .crown{margin:0}
+/* top-right menu */
+.brand{padding-right:52px}
+.menubtn{position:absolute;top:0;right:max(10px,env(safe-area-inset-right,0px));appearance:none;background:transparent;border:1px solid color-mix(in srgb,var(--band-ink) 28%,transparent);color:var(--band-ink);width:42px;height:42px;border-radius:8px;display:grid;place-items:center;cursor:pointer}
+.menubtn[aria-expanded="true"]{background:color-mix(in srgb,var(--band-ink) 14%,transparent)}
+.menu-scrim{position:fixed;inset:0;z-index:30;background:color-mix(in srgb,#000 25%,transparent)}
+.menu{position:fixed;z-index:31;top:calc(env(safe-area-inset-top,0px) + 70px);right:max(12px,calc((100vw - 720px)/2 + 12px));width:min(260px,calc(100vw - 24px));background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.25);padding:6px;display:flex;flex-direction:column}
+.menu button{appearance:none;display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:0;border-radius:8px;padding:12px 12px;color:var(--ink);font-family:var(--f-label);font-weight:700;font-size:17px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.menu button:hover,.menu button:focus-visible{background:var(--bg)}
+.menu button svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;color:var(--muted)}
+.menu button[data-act="signout"]{color:var(--bad)}
+.menu button[data-act="signout"] svg{color:var(--bad)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 6px}
+/* account + settings pages */
+.kv{display:flex;flex-direction:column;gap:2px}
+.kv-v{font-weight:600;overflow-wrap:anywhere}
+.panel input{width:100%}
+.seg{display:flex;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:4px}
+.seg button{flex:1;appearance:none;display:flex;align-items:center;justify-content:center;gap:8px;border:0;background:transparent;color:var(--muted);font-family:var(--f-label);font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;padding:10px;border-radius:6px;cursor:pointer}
+.seg button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.toggles{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.toggle{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.tg-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.tg-t b{font-weight:600}
+.tg-t span{font-size:13px;color:var(--muted)}
+.toggle input{position:absolute;opacity:0;width:1px;height:1px}
+.tg-ui{flex:none;width:46px;height:28px;border-radius:999px;background:var(--line);position:relative;transition:background .15s}
+.tg-ui::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.toggle input:checked + .tg-ui{background:var(--good)}
+.toggle input:checked + .tg-ui::after{transform:translateX(18px)}
+.toggle input:focus-visible + .tg-ui{outline:2px solid var(--gold);outline-offset:2px}
+.pushstate{display:flex;align-items:center;gap:8px;font-weight:600}
+.pushstate .dot{width:10px;height:10px;border-radius:50%;background:var(--good)}
+.row-btns{display:flex;flex-wrap:wrap;gap:8px}
+.btn:disabled{opacity:.6;cursor:default}
+.appintro{display:flex;align-items:center;gap:14px}
+.appintro img{border-radius:12px;flex:none}
+.steps ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px}
+.steps li::marker{font-family:var(--f-display);font-weight:900;color:var(--gold)}
+.shareico svg{width:18px;height:18px;vertical-align:-3px;fill:none;stroke:var(--blue);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}

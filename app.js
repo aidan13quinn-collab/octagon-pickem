@@ -8,7 +8,10 @@ const sb = window.supabase.createClient(window.OP_CONFIG.supabaseUrl, window.OP_
 const S = {
   session: null, uid: null,
   cards: [], profiles: {}, picks: [], locks: [],
-  tab: "picks", cardId: null, authMode: "signin", loaded: false, viewUser: null, fighters: {}, openForm: new Set()
+  tab: "picks", cardId: null, authMode: "signin", loaded: false, viewUser: null, fighters: {}, openForm: new Set(),
+  page: null,            // "account" | "settings" | "app" when opened from the menu
+  prefs: null,           // this player's notification choices
+  push: { subscribed: false, busy: false }
 };
 try { const t = localStorage.getItem("op-tab"); if (t === "picks" || t === "board") S.tab = t; } catch (e) {}
 
@@ -141,16 +144,18 @@ function render(){
   const signedIn = !!S.uid;
   $("#me").hidden = !signedIn; $("#tabs").hidden = !signedIn;
   if(signedIn){
-    $("#me").innerHTML = `<span class="who-am-i">${avatar(S.uid)}<span id="me-name"></span></span><button class="linkbtn" data-act="signout">Sign out</button>`;
+    $("#me").innerHTML = `<span class="who-am-i">${avatar(S.uid)}<span id="me-name"></span></span>`;
     $("#me-name").textContent = nameOf(S.uid);
     if(S.loaded) $("#me-name").insertAdjacentHTML("afterbegin", crown(S.uid));
-    document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected", String(t.dataset.tab===S.tab)));
+    document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected", String(!S.page && t.dataset.tab===S.tab)));
   }
+  $("#menu-btn").hidden = !signedIn;
+  if(!signedIn) closeMenu();
   preserve(()=>{
     const app = $("#app");
     if(!signedIn){ app.innerHTML = authHTML(); return; }
     if(!S.loaded){ app.innerHTML = emptyHTML("Loading the card","Connecting to your league."); return; }
-    app.innerHTML = S.tab==="board" ? boardHTML() : picksHTML();
+    app.innerHTML = S.page ? pageHTML() : (S.tab==="board" ? boardHTML() : picksHTML());
   });
 }
 
@@ -189,24 +194,238 @@ function cardSelect(){
   return `<select id="sel-card" aria-label="Fight card">${S.cards.map(c=>`<option value="${esc(c.id)}" ${c.id===S.cardId?"selected":""}>${esc(c.name)}${c.date?" · "+esc(fmtDate(c.date)):""}</option>`).join("")}</select>`;
 }
 
+/* ---------- menu ---------- */
+function openMenu(){ $("#menu").hidden=false; $("#menu-scrim").hidden=false; $("#menu-btn").setAttribute("aria-expanded","true"); $("#menu button")?.focus(); }
+function closeMenu(){ $("#menu").hidden=true; $("#menu-scrim").hidden=true; $("#menu-btn").setAttribute("aria-expanded","false"); }
+function openPage(p){
+  S.page=p; S.viewUser=null; render(); window.scrollTo(0,0);
+  if(p==="settings"){ loadPrefs(); syncPush(); }
+}
+async function signOut(){
+  // stop this device getting the old account's notifications
+  try{
+    const reg = await swReady();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if(sub){ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); }
+  }catch(e){}
+  await sb.auth.signOut();
+}
+
+/* ---------- theme ---------- */
+function currentTheme(){ return document.documentElement.dataset.theme==="dark" ? "dark" : "light"; }
+function setTheme(t){
+  document.documentElement.dataset.theme=t;
+  try{ localStorage.setItem("fw-theme",t); }catch(e){}
+  render();
+}
+
 /* ---------- install as an app ---------- */
 let deferredInstall = null;
 const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
-function installDismissed(){ try{ return localStorage.getItem("fw-install-dismissed")==="1"; }catch(e){ return false; } }
-function installHTML(){
-  if(isStandalone() || installDismissed()) return "";
-  if(deferredInstall){
-    return `<div class="install"><img src="/icons/icon-192.png" alt="" width="40" height="40"><div class="ins-t"><b>Get the Fight Week app</b><span>Add it to your home screen for one-tap picks.</span></div><button class="btn gold sm" data-act="install">Install</button><button class="ins-x" data-act="install-x" aria-label="Dismiss">×</button></div>`;
-  }
-  if(isIOS()){
-    return `<div class="install"><img src="/icons/icon-192.png" alt="" width="40" height="40"><div class="ins-t"><b>Get the Fight Week app</b><span>In Safari, tap the Share button <span class="shareico" aria-hidden="true">⬆︎</span>, then <b>Add to Home Screen</b>.</span></div><button class="ins-x" data-act="install-x" aria-label="Dismiss">×</button></div>`;
-  }
-  return "";
-}
+const isAndroid = () => /android/i.test(navigator.userAgent);
 window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferredInstall = e; render(); });
 window.addEventListener("appinstalled", ()=>{ deferredInstall = null; render(); toast("Fight Week is on your home screen."); });
 if("serviceWorker" in navigator){ window.addEventListener("load", ()=>{ navigator.serviceWorker.register("/sw.js").catch(()=>{}); }); }
+
+/* ---------- notifications ---------- */
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+async function swReady(){
+  if(!("serviceWorker" in navigator)) return null;
+  try{
+    const reg = await navigator.serviceWorker.getRegistration() || await navigator.serviceWorker.register("/sw.js");
+    return await navigator.serviceWorker.ready || reg;
+  }catch(e){ return null; }
+}
+function keyBytes(b64){
+  const pad = "=".repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g,"+").replace(/_/g,"/"));
+  return Uint8Array.from(raw, c=>c.charCodeAt(0));
+}
+async function saveSub(sub){
+  const j = sub.toJSON();
+  const { error } = await sb.from("push_subscriptions").upsert({
+    endpoint: j.endpoint, user_id: S.uid, p256dh: j.keys.p256dh, auth: j.keys.auth,
+    user_agent: navigator.userAgent.slice(0,200), updated_at: new Date().toISOString()
+  });
+  return !error;
+}
+// on sign-in and when Settings opens: is this device subscribed, and does the server know?
+async function syncPush(){
+  if(!S.uid || !pushSupported() || Notification.permission!=="granted"){ S.push.subscribed=false; if(S.page==="settings") render(); return; }
+  const reg = await swReady();
+  const sub = reg && await reg.pushManager.getSubscription();
+  S.push.subscribed = !!sub;
+  if(sub) await saveSub(sub);
+  if(S.page==="settings") render();
+}
+async function pushOn(){
+  if(S.push.busy) return;
+  S.push.busy=true; render();
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm!=="granted"){ toast(perm==="denied" ? "Notifications are blocked. Allow them in your settings." : "Notifications weren't turned on."); return; }
+    const reg = await swReady();
+    if(!reg) throw new Error("no service worker");
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:keyBytes(window.OP_CONFIG.vapidPublicKey) });
+    if(!await saveSub(sub)) throw new Error("save failed");
+    if(!S.prefs) await savePrefs(S.prefs || defaultPrefs());
+    S.push.subscribed=true;
+    toast("Notifications are on for this device.");
+  }catch(e){
+    console.error(e); toast("Couldn't turn on notifications. Try again.");
+  }finally{ S.push.busy=false; render(); }
+}
+async function pushOff(){
+  if(S.push.busy) return;
+  S.push.busy=true; render();
+  try{
+    const reg = await swReady();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if(sub){ await sb.from("push_subscriptions").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); }
+    S.push.subscribed=false; toast("Notifications are off for this device.");
+  }catch(e){ toast("Couldn't turn notifications off. Try again."); }
+  finally{ S.push.busy=false; render(); }
+}
+async function pushTest(){
+  const { data, error } = await sb.functions.invoke("notify", { body:{ job:"test" } });
+  if(error || !data) toast("Couldn't send a test. Try again.");
+  else if(!data.sent) toast("No devices got it. Turn notifications off and on again.");
+  else toast("Test sent. It should pop up in a few seconds.");
+}
+const defaultPrefs = () => ({ fight_cancelled:true, fight_added:true, friday_reminder:true });
+async function loadPrefs(){
+  if(!S.uid) return;
+  const { data } = await sb.from("notify_prefs").select("fight_cancelled,fight_added,friday_reminder").eq("user_id",S.uid).maybeSingle();
+  S.prefs = data || defaultPrefs();
+  if(S.page==="settings") render();
+}
+async function savePrefs(p){
+  const { error } = await sb.from("notify_prefs").upsert({ user_id:S.uid, ...p, updated_at:new Date().toISOString() });
+  return !error;
+}
+async function savePref(key, on){
+  S.prefs = { ...(S.prefs || defaultPrefs()), [key]: on };
+  if(!await savePrefs(S.prefs)){ toast("Couldn't save that setting. Try again."); loadPrefs(); }
+}
+
+/* ---------- account ---------- */
+async function saveName(){
+  const input=$("#acc-name"), err=$("#name-err"), btn=$("#name-save");
+  const name=input.value.trim();
+  err.hidden=true;
+  if(!name){ err.textContent="Your username can't be blank."; err.hidden=false; return; }
+  if(name.length>30){ err.textContent="Keep it to 30 characters or fewer."; err.hidden=false; return; }
+  if(name===nameOf(S.uid)){ toast("That's already your username."); return; }
+  btn.disabled=true;
+  const { error } = await sb.from("profiles").update({ display_name:name }).eq("id",S.uid);
+  btn.disabled=false;
+  if(error){ err.textContent="Couldn't save your username. Try again."; err.hidden=false; return; }
+  S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), display_name:name };
+  input.value=""; render(); toast("Username updated.");
+}
+async function savePassword(){
+  const p1=$("#acc-pass").value, p2=$("#acc-pass2").value, err=$("#pass-err"), btn=$("#pass-save");
+  err.hidden=true;
+  if(p1.length<6){ err.textContent="Use at least 6 characters."; err.hidden=false; return; }
+  if(p1!==p2){ err.textContent="Those passwords don't match."; err.hidden=false; return; }
+  btn.disabled=true;
+  const { error } = await sb.auth.updateUser({ password:p1 });
+  btn.disabled=false;
+  if(error){ err.textContent = /different from the old/i.test(error.message||"") ? "Pick a password you haven't used here before." : (error.message || "Couldn't change your password. Try again."); err.hidden=false; return; }
+  $("#acc-pass").value=""; $("#acc-pass2").value=""; toast("Password changed.");
+}
+
+/* ---------- pages ---------- */
+const pageTitles = { account:"Account", settings:"Settings", app:"Get the app" };
+function pageHTML(){
+  let h = `<button class="backbtn" data-act="closepage">‹ Back</button><div class="event-head"><h2>${esc(pageTitles[S.page]||"")}</h2></div>`;
+  if(S.page==="account") h += accountHTML();
+  else if(S.page==="settings") h += settingsHTML();
+  else if(S.page==="app") h += appHTML();
+  return h;
+}
+function accountHTML(){
+  const email = S.session?.user?.email || "";
+  const joined = S.session?.user?.created_at ? new Date(S.session.user.created_at).toLocaleDateString(undefined,{month:"long",year:"numeric"}) : "";
+  return `
+  <div class="phead">${avatar(S.uid)}<div class="pmeta"><h2>${esc(nameOf(S.uid))}</h2>${joined?`<div class="note">In the league since ${esc(joined)}</div>`:""}</div></div>
+  <form class="panel" id="name-form" autocomplete="off" novalidate>
+    <h3>Username</h3>
+    <p class="note" style="margin:0">This is the name everyone sees on the standings and picks.</p>
+    <div class="row"><div class="field"><label class="label" for="acc-name">New username</label><input id="acc-name" maxlength="30" placeholder="${esc(nameOf(S.uid))}" autocapitalize="words"></div><button class="btn" type="submit" id="name-save">Save</button></div>
+    <p class="err" id="name-err" hidden></p>
+  </form>
+  <div class="panel">
+    <h3>Login info</h3>
+    <div class="kv"><span class="label">Email</span><span class="kv-v">${esc(email)}</span></div>
+    <p class="note" style="margin:0">You sign in with this email and your password.</p>
+  </div>
+  <form class="panel" id="pass-form" method="post" action="#" novalidate>
+    <h3>Change password</h3>
+    <input type="email" name="email" autocomplete="username" value="${esc(email)}" hidden>
+    <div class="field"><label class="label" for="acc-pass">New password</label><input id="acc-pass" type="password" autocomplete="new-password" minlength="6"></div>
+    <div class="field"><label class="label" for="acc-pass2">Type it again</label><input id="acc-pass2" type="password" autocomplete="new-password" minlength="6"></div>
+    <p class="err" id="pass-err" hidden></p>
+    <div><button class="btn" type="submit" id="pass-save">Change password</button></div>
+  </form>
+  <div><button class="btn danger" data-act="signout">Sign out</button></div>`;
+}
+function toggleRow(key, title, desc){
+  const on = !!(S.prefs || defaultPrefs())[key];
+  return `<label class="toggle"><span class="tg-t"><b>${esc(title)}</b><span>${esc(desc)}</span></span><input type="checkbox" role="switch" data-pref="${key}" ${on?"checked":""}><span class="tg-ui" aria-hidden="true"></span></label>`;
+}
+function settingsHTML(){
+  const t = currentTheme();
+  let h = `<div class="panel"><h3>Appearance</h3>
+    <div class="seg" role="group" aria-label="Theme">
+      <button data-act="theme" data-v="light" aria-pressed="${t==="light"}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>Light</button>
+      <button data-act="theme" data-v="dark" aria-pressed="${t==="dark"}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>Dark</button>
+    </div></div>`;
+
+  h += `<div class="panel"><h3>Notifications</h3>`;
+  if(!pushSupported()){
+    h += isIOS() && !isStandalone()
+      ? `<p class="note" style="margin:0">On iPhone, notifications only work in the Fight Week app. Add it to your Home Screen, open it from there, then come back here to turn them on.</p><div><button class="btn gold" data-act="page" data-v="app">How to get the app</button></div>`
+      : `<p class="note" style="margin:0">This browser can't show notifications. Try Chrome or Safari, or install the app.</p>`;
+  } else if(Notification.permission==="denied"){
+    h += `<p class="note" style="margin:0">Notifications are blocked for Fight Week on this device. Allow them in your ${isIOS()?"iPhone Settings › Notifications › Fight Week":"browser's site settings"}, then come back here.</p>`;
+  } else if(S.push.subscribed){
+    h += `<div class="pushstate on"><span class="dot" aria-hidden="true"></span><span>On for this device</span></div>
+      <div class="row-btns"><button class="btn ghost sm" data-act="push-test">Send a test</button><button class="btn ghost sm" data-act="push-off" ${S.push.busy?"disabled":""}>Turn off on this device</button></div>`;
+  } else {
+    h += `<p class="note" style="margin:0">Get a heads-up on your phone when the card changes and before picks lock.</p>
+      <div><button class="btn gold" data-act="push-on" ${S.push.busy?"disabled":""}>${S.push.busy?"Turning on…":"Turn on notifications"}</button></div>`;
+  }
+  h += `<div class="toggles">
+    ${toggleRow("fight_cancelled","A fight gets cancelled","When a bout on the upcoming card is called off.")}
+    ${toggleRow("fight_added","A fight gets added","When a new bout is added to the upcoming card.")}
+    ${toggleRow("friday_reminder","Friday reminder","Fridays at 5 PM ET: what time picks lock tomorrow, when the card starts.")}
+  </div>
+  <p class="note" style="margin:0">These choices apply to every device where you turn notifications on.</p></div>`;
+  return h;
+}
+function appHTML(){
+  if(isStandalone()) return `<div class="panel"><h3>You're all set</h3><p class="note" style="margin:0">You're using the Fight Week app right now. Turn on notifications in Settings so you don't miss a card change.</p><div><button class="btn gold" data-act="page" data-v="settings">Go to Settings</button></div></div>`;
+  const ios = `<div class="panel steps"><h3>iPhone</h3><ol>
+      <li>Open <b>${esc(location.host)}</b> in <b>Safari</b>.</li>
+      <li>Tap the <b>Share</b> button <span class="shareico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg></span> at the bottom of the screen.</li>
+      <li>Scroll down and tap <b>Add to Home Screen</b>.</li>
+      <li>Tap <b>Add</b>. Fight Week shows up on your Home Screen like any other app.</li>
+      <li>Open it from your Home Screen, then go to <b>Settings</b> to turn on notifications.</li></ol></div>`;
+  const android = `<div class="panel steps"><h3>Android</h3>
+      ${deferredInstall?`<div><button class="btn gold" data-act="install">Install Fight Week</button></div><p class="note" style="margin:0">Or do it by hand:</p>`:""}
+      <ol><li>Open <b>${esc(location.host)}</b> in <b>Chrome</b>.</li>
+      <li>Tap the <b>⋮</b> menu in the top right.</li>
+      <li>Tap <b>Install app</b> (or <b>Add to Home screen</b>).</li>
+      <li>Tap <b>Install</b>. Fight Week shows up with your other apps.</li>
+      <li>Open it, then go to <b>Settings</b> to turn on notifications.</li></ol></div>`;
+  let h = `<div class="appintro"><img src="/icons/icon-192.png" alt="" width="56" height="56"><p class="note" style="margin:0">Put Fight Week on your home screen. It opens full-screen like a regular app, and it's how you get notifications on iPhone.</p></div>`;
+  h += isAndroid() ? android + ios : ios + android;
+  if(!isIOS() && !isAndroid() && deferredInstall) h += `<div class="panel"><h3>On this computer</h3><div><button class="btn gold" data-act="install">Install Fight Week</button></div></div>`;
+  return h;
+}
 
 function picksHTML(){
   const c = currentCard();
@@ -420,20 +639,33 @@ function playerHTML(uid){
 /* ---------- events ---------- */
 $("#tabs").addEventListener("click", e=>{
   const t=e.target.closest(".tab"); if(!t) return;
-  S.tab=t.dataset.tab; S.viewUser=null; try{ localStorage.setItem("op-tab",S.tab); }catch(err){} render();
+  S.tab=t.dataset.tab; S.viewUser=null; S.page=null; try{ localStorage.setItem("op-tab",S.tab); }catch(err){} render();
 });
-$("#me").addEventListener("click", async e=>{
-  if(e.target.closest('[data-act="signout"]')){ await sb.auth.signOut(); }
+$("#menu-btn").addEventListener("click", ()=>{ $("#menu").hidden ? openMenu() : closeMenu(); });
+$("#menu-scrim").addEventListener("click", closeMenu);
+document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("#menu").hidden){ closeMenu(); $("#menu-btn").focus(); } });
+$("#menu").addEventListener("click", async e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  closeMenu();
+  if(b.dataset.act==="signout"){ await signOut(); return; }
+  if(b.dataset.page) openPage(b.dataset.page);
 });
 $("#app").addEventListener("change", e=>{
   if(e.target.id==="sel-card"){ S.cardId=e.target.value; render(); }
+  if(e.target.dataset.pref){ savePref(e.target.dataset.pref, e.target.checked); }
 });
 $("#app").addEventListener("click", e=>{
   const b=e.target.closest("[data-act]"); if(!b || b.disabled) return;
   const act=b.dataset.act;
   if(act==="mode"){ S.authMode=b.dataset.v; render(); return; }
   if(act==="install" && deferredInstall){ deferredInstall.prompt(); deferredInstall.userChoice.finally(()=>{ deferredInstall=null; render(); }); return; }
-  if(act==="install-x"){ try{ localStorage.setItem("fw-install-dismissed","1"); }catch(e){} render(); return; }
+  if(act==="page"){ openPage(b.dataset.v); return; }
+  if(act==="closepage"){ S.page=null; render(); window.scrollTo(0,0); return; }
+  if(act==="theme"){ setTheme(b.dataset.v); return; }
+  if(act==="push-on"){ pushOn(); return; }
+  if(act==="push-off"){ pushOff(); return; }
+  if(act==="push-test"){ pushTest(); return; }
+  if(act==="signout"){ signOut(); return; }
   if(act==="player"){ S.viewUser=b.dataset.uid; S.tab="board"; render(); window.scrollTo(0,0); return; }
   if(act==="back"){ S.viewUser=null; render(); return; }
   if(act==="pcard"){ S.cardId=b.dataset.card; render(); return; }
@@ -444,6 +676,8 @@ $("#app").addEventListener("click", e=>{
   if(act==="lock") toggleLock(c,f);
 });
 $("#app").addEventListener("submit", async e=>{
+  if(e.target.id==="name-form"){ e.preventDefault(); saveName(); return; }
+  if(e.target.id==="pass-form"){ e.preventDefault(); savePassword(); return; }
   if(e.target.id!=="auth-form") return;
   e.preventDefault();
   const err=$("#a-err"), ok=$("#a-ok"), btn=$("#a-submit");
@@ -472,8 +706,8 @@ $("#app").addEventListener("submit", async e=>{
 /* ---------- boot ---------- */
 async function onSession(session){
   S.session = session; S.uid = session?.user?.id || null;
-  if(S.uid){ S.loaded=false; render(); await loadAll(); subscribe(); }
-  else { unsubscribe(); S.cards=[]; S.picks=[]; S.locks=[]; S.profiles={}; S.loaded=false; render(); }
+  if(S.uid){ S.loaded=false; render(); await loadAll(); subscribe(); syncPush(); }
+  else { unsubscribe(); S.cards=[]; S.picks=[]; S.locks=[]; S.profiles={}; S.loaded=false; S.page=null; S.prefs=null; S.push={subscribed:false,busy:false}; render(); }
 }
 sb.auth.onAuthStateChange((event, session)=>{
   if(event==="SIGNED_IN" || event==="SIGNED_OUT" || event==="INITIAL_SESSION"){
