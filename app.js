@@ -215,7 +215,8 @@ function render(){
   if(signedIn){
     $("#me").innerHTML = `<span class="who-am-i">${avatar(S.uid)}<span id="me-name"></span></span>`;
     $("#me-name").textContent = nameOf(S.uid);
-    if(S.loaded) $("#me-name").insertAdjacentHTML("afterbegin", crown(S.uid));
+    $("#me-name").insertAdjacentHTML("afterbegin", commish(S.uid));
+    if(S.loaded) $("#me-name").insertAdjacentHTML("beforeend", crown(S.uid));
     document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected", String(!S.page && t.dataset.tab===S.tab)));
   }
   $("#menu-btn").hidden = !signedIn;
@@ -419,7 +420,7 @@ function accountHTML(){
   const email = S.session?.user?.email || "";
   const joined = S.session?.user?.created_at ? new Date(S.session.user.created_at).toLocaleDateString(undefined,{month:"long",year:"numeric"}) : "";
   return `
-  <div class="phead">${avatar(S.uid)}<div class="pmeta"><h2>${esc(nameOf(S.uid))}</h2>${joined?`<div class="note">In the league since ${esc(joined)}</div>`:""}</div></div>
+  <div class="phead">${avatar(S.uid)}<div class="pmeta"><h2>${commish(S.uid)}${esc(nameOf(S.uid))}</h2>${joined?`<div class="note">In the league since ${esc(joined)}</div>`:""}</div></div>
   <form class="panel" id="name-form" autocomplete="off" novalidate>
     <h3>Username</h3>
     <p class="note" style="margin:0">This is the name everyone sees on the standings and picks.</p>
@@ -610,7 +611,7 @@ function crowdHTML(c,f){
   picksForFight(c.id,f.id).forEach(p=>(p.side==="red"?red:blue).push(p.user_id));
   const n = red.length+blue.length;
   if(!n) return locked0(c) ? `<div class="crowd"><span class="note">Nobody picked this one.</span></div>` : "";
-  const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${esc(nameOf(id))}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
+  const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${commish(id)}${esc(nameOf(id))}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
   return `<div class="crowd"><span class="label">League picks · ${red.length}–${blue.length}</span>
     <div class="bar" aria-hidden="true"><i style="width:${red.length/n*100}%;background:var(--red)"></i><i style="width:${blue.length/n*100}%;background:var(--blue)"></i></div>
     <div class="who"><span style="color:var(--red)">${esc(f.red)}:</span>${red.map(desc).join("")||"<span>none</span>"}</div>
@@ -635,7 +636,7 @@ function boardHTML(){
   h += `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
   rows.forEach((r,i)=>{
     h += `<tr class="${i===0&&r.w>0?"top":""}"><td class="rk">${i+1}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${crown(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id)}</span><span class="chev" aria-hidden="true">›</span></button></td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${commish(r.id)}${esc(nameOf(r.id))}${crown(r.id)}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id)}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
   h += `</tbody></table></div><p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
@@ -655,6 +656,9 @@ function lastWinnersCalc(){
   return { card:c, ids, best };
 }
 const crownSVG = `<svg viewBox="0 0 24 18" width="18" height="14" aria-hidden="true"><path d="M2 15 L1 4 L7 9 L12 1 L17 9 L23 4 L22 15 Z" fill="currentColor"/><rect x="2" y="15.5" width="20" height="2.5" rx="1" fill="currentColor"/></svg>`;
+// league commissioner (the person who built and runs Fight Week)
+const COMMISSIONER_ID = "414eba8d-669f-4cbb-8976-abb42c12c228";
+function commish(uid){ return uid===COMMISSIONER_ID ? `<span class="commish" title="League commissioner">Commish</span>` : ""; }
 function crown(uid){
   const W = lastWinners();
   return W.ids.has(uid) ? `<span class="crown" title="Won ${esc(W.card.name)}">${crownSVG}</span>` : "";
@@ -668,7 +672,7 @@ function playerHTML(uid){
   const me = uid===S.uid;
   const r = standings().find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0};
   let h = `<button class="backbtn" data-act="back">‹ Standings</button>
-    <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${crown(uid)}${esc(nameOf(uid))}${me?" (you)":""}</h2>
+    <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${commish(uid)}${esc(nameOf(uid))}${crown(uid)}${me?" (you)":""}</h2>
       <div class="pstats"><span><b>${r.w}–${r.l}</b> picks</span><span class="lk-stat"><b>${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
   const c = currentCard();
   if(!c) return h + emptyHTML("No cards yet","Their picks will show up here once a card is posted.");
