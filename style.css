@@ -217,3 +217,23 @@ img{max-width:100%}
 .locktag svg{width:12px;height:12px;flex:none}
 .locktag.hit{color:var(--good)} .locktag.miss{color:var(--bad)}
 .pmeta .locktag{margin-top:6px}
+
+/* fighter recent form */
+.form{display:flex;gap:3px;margin-top:6px;flex-wrap:wrap}
+.fighter.blue .form{justify-content:flex-end}
+.fr{font-style:normal;display:inline-grid;place-items:center;width:18px;height:18px;border-radius:4px;font-family:var(--f-label);font-weight:700;font-size:11px;color:#fff;background:var(--muted);flex:none}
+.fr.w{background:var(--good)} .fr.l{background:var(--bad)} .fr.d,.fr.nc{background:var(--muted)}
+.form-debut{font-family:var(--f-label);font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+.histbtn{appearance:none;align-self:flex-start;background:none;border:0;padding:0;font-family:var(--f-label);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.hist{display:grid;grid-template-columns:1fr 1fr;gap:12px;border-top:1px dashed var(--line);padding-top:10px}
+@media (max-width:520px){.hist{grid-template-columns:1fr}}
+.hcol{display:flex;flex-direction:column;gap:6px;min-width:0}
+.hname{font-family:var(--f-label);font-weight:700;font-size:15px;text-transform:uppercase;overflow-wrap:anywhere}
+.hcol.red .hname{color:var(--red)} .hcol.blue .hname{color:var(--blue)}
+.hrec{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.hlist li{display:flex;gap:8px;align-items:flex-start}
+.hlist .fr{margin-top:1px}
+.hmain{display:flex;flex-direction:column;min-width:0}
+.hopp{font-weight:600;font-size:14px;overflow-wrap:anywhere}
+.hmeta{font-size:12px;color:var(--muted)}
