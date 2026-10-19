@@ -350,7 +350,7 @@ function boardHTML(){
       <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${crown(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id)}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
-  h += `</tbody></table></div>${(()=>{ const W=lastWinners(); return W.card && W.ids.size ? `<p class="note crownnote"><span class="crown">${crownSVG}</span> ${W.ids.size>1?"Tied for the win":"Won"} ${esc(W.card.name)} with ${W.best} correct.</p>` : ""; })()}<p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
+  h += `</tbody></table></div><p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
   return h;
 }
 
