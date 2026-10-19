@@ -76,7 +76,7 @@ async function loadAll(){
     sb.from("profiles").select("id,display_name"),
     sb.from("picks").select("user_id,card_id,fight_id,side"),
     sb.from("locks").select("user_id,card_id,fight_id"),
-    sb.from("fighters").select("name,record,recent")
+    sb.from("fighters").select("name,record,recent,country")
   ]);
   const err = cards.error || profiles.error || picks.error || locks.error;
   if(err){ toast("Couldn't load the league. Pull to refresh."); console.error(err); }
@@ -257,7 +257,7 @@ function fighterBtn(c,f,side,p,locked,res){
   const odds = side==="red"?f.oddsRed:f.oddsBlue;
   const won = res && res.w===side;
   return `<button class="fighter ${side}${won?" won":""}" data-act="pick" data-fight="${esc(f.id)}" data-v="${side}" aria-pressed="${p===side}" ${locked?"disabled":""}>
-    <span class="cn">${side==="red"?"Red corner":"Blue corner"}${won?" · Winner":""}</span><span class="nm">${esc(name)}</span>
+    <span class="cn">${side==="red"?"Red corner":"Blue corner"}${won?" · Winner":""}</span><span class="nm">${side==="red"?flag(name)+esc(name):esc(name)+flag(name)}</span>
     <span class="od">${odds!=null?esc(fmtOdds(odds)):"Odds TBA"}</span></button>`;
 }
 // last-5 UFC results as little W/L chips, newest first
@@ -266,10 +266,16 @@ function formStrip(name){
   if(!fx.recent || !fx.recent.length) return `<span class="form"><span class="form-debut">UFC debut</span></span>`;
   return `<span class="form" aria-label="Last ${fx.recent.length} UFC fights">${fx.recent.map(r=>`<i class="fr ${esc(String(r.res).toLowerCase())}">${esc(r.res)}</i>`).join("")}</span>`;
 }
+// country flag image (public-domain flags from flagcdn), from the fighters table
+function flag(name){
+  const c = S.fighters[name]?.country;
+  if(!c || !/^[a-z]{2}(-[a-z]{3})?$/.test(c)) return "";
+  return `<img class="flag" src="https://flagcdn.com/${c}.svg" alt="" loading="lazy" width="20" height="14">`;
+}
 function fmtShort(d){ try{ return new Date(d+"T12:00:00").toLocaleDateString(undefined,{month:"short",year:"2-digit"}); }catch(e){ return d; } }
 function historyCol(name, side){
   const fx = S.fighters[name];
-  let h = `<div class="hcol ${side}"><div class="hname">${esc(name)}</div>`;
+  let h = `<div class="hcol ${side}"><div class="hname">${flag(name)}${esc(name)}</div>`;
   if(!fx){ return h + `<p class="note" style="margin:0">History not loaded yet.</p></div>`; }
   h += fx.record ? `<div class="hrec">${esc(fx.record)} pro record</div>` : "";
   if(!fx.recent || !fx.recent.length) return h + `<p class="note" style="margin:0">No UFC fights yet. This is their UFC debut.</p></div>`;

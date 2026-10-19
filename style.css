@@ -245,3 +245,7 @@ img{max-width:100%}
 .histbtn{text-decoration:none;display:inline-flex;gap:4px;align-items:center;padding:4px 2px}
 .histbtn:hover{color:var(--ink)}
 .hist{grid-template-columns:1fr}
+/* country flags */
+.flag{display:inline-block;width:20px;height:14px;object-fit:cover;border-radius:2px;vertical-align:-1px;box-shadow:0 0 0 1px color-mix(in srgb,var(--ink) 15%,transparent);margin:0 6px 0 0}
+.fighter.blue .nm .flag{margin:0 0 0 6px}
+.hname .flag{margin-right:6px}
