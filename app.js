@@ -160,11 +160,11 @@ function authHTML(){
       <button data-act="mode" data-v="signin" aria-pressed="${!up}">Sign in</button>
       <button data-act="mode" data-v="signup" aria-pressed="${up}">Join the league</button>
     </div>
-    <form id="auth-form" class="panel" novalidate>
+    <form id="auth-form" class="panel" method="post" action="#" autocomplete="on" novalidate>
       <h3>${up?"Create your account":"Welcome back"}</h3>
-      ${up?`<div class="field"><label class="label" for="a-name">Display name</label><input id="a-name" maxlength="30" autocomplete="nickname" placeholder="What your friends call you" required></div>`:""}
-      <div class="field"><label class="label" for="a-email">Email</label><input id="a-email" type="email" autocomplete="email" required></div>
-      <div class="field"><label class="label" for="a-pass">Password</label><input id="a-pass" type="password" autocomplete="${up?"new-password":"current-password"}" minlength="6" required></div>
+      ${up?`<div class="field"><label class="label" for="a-name">Display name</label><input id="a-name" name="nickname" maxlength="30" autocomplete="nickname" placeholder="What your friends call you" required></div>`:""}
+      <div class="field"><label class="label" for="a-email">Email</label><input id="a-email" name="email" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></div>
+      <div class="field"><label class="label" for="a-pass">Password</label><input id="a-pass" name="password" type="password" autocomplete="${up?"new-password":"current-password"}" minlength="6" required></div>
       <p class="err" id="a-err" hidden></p><p class="ok" id="a-ok" hidden></p>
       <button class="btn gold" type="submit" id="a-submit">${up?"Join the league":"Sign in"}</button>
       ${up?`<p class="note" style="margin:0">Passwords need at least 6 characters.</p>`:""}
@@ -218,7 +218,7 @@ function picksHTML(){
   fights.forEach(f=>{ const g=grade(pickOf(S.uid,c.id,f.id),f); if(g===1) cw++; else if(g===0) cl++; });
   const locked = cardLocked(c);
 
-  let h = installHTML() + `<div class="cardpick"><div class="event-head">
+  let h = `<div class="cardpick"><div class="event-head">
       <h2>${esc(c.name)}</h2>
       ${c.date?`<span class="label">${esc(fmtDate(c.date))}</span>`:""}
       <span class="pill ${locked?"locked":"open"}">${locked?"Picks locked":(c.lock_at?`Picks lock ${esc(fmtLockAt(c))}`:"Picks open")}</span>
