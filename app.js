@@ -7,7 +7,7 @@ const sb = window.supabase.createClient(window.OP_CONFIG.supabaseUrl, window.OP_
 
 const S = {
   session: null, uid: null,
-  cards: [], profiles: {}, picks: [], locks: [],
+  cards: [], profiles: {}, pickMap: new Map(), lockMap: new Map(), ver: 0,
   tab: "picks", cardId: null, authMode: "signin", loaded: false, viewUser: null, fighters: {}, openForm: new Set(),
   page: null,            // "account" | "settings" | "app" when opened from the menu
   prefs: null,           // this player's notification choices
@@ -32,9 +32,18 @@ function nameOf(id){ return S.profiles[id]?.display_name || "Player"; }
 function colorFor(id){ let h=0; for(const ch of String(id)) h=(h*31+ch.charCodeAt(0))>>>0; return `hsl(${h%360} 55% 42%)`; }
 function avatar(id){ const n=nameOf(id); return `<span class="avatar" style="background:${colorFor(id)}" aria-hidden="true">${esc(n.trim().charAt(0).toUpperCase()||"?")}</span>`; }
 
-// pick lookups
-function pickOf(uid, cardId, fightId){ return S.picks.find(p=>p.user_id===uid && p.card_id===cardId && p.fight_id===fightId)?.side || null; }
-function lockRow(uid, cardId){ return S.locks.find(l=>l.user_id===uid && l.card_id===cardId) || null; }
+// pick lookups (indexed, so the page stays fast with hundreds of players)
+const pk = (u,c,f) => u+"|"+c+"|"+f;
+const lk = (u,c) => u+"|"+c;
+function pickOf(uid, cardId, fightId){ return S.pickMap.get(pk(uid,cardId,fightId))?.side || null; }
+function lockRow(uid, cardId){ return S.lockMap.get(lk(uid,cardId)) || null; }
+// results of heavy calculations are reused until the data changes
+const memo = {};
+function cached(name, fn){ const m = memo[name]; if(m && m.v===S.ver) return m.r; const r = fn(); memo[name] = { v:S.ver, r }; return r; }
+function picksForFight(cardId, fightId){
+  const idx = cached("byFight", ()=>{ const m = new Map(); for(const p of S.pickMap.values()){ const k = p.card_id+"|"+p.fight_id; if(!m.has(k)) m.set(k, []); m.get(k).push(p); } return m; });
+  return idx.get(cardId+"|"+fightId) || [];
+}
 // 1 = correct, 0 = wrong, null = not graded / doesn't count
 function grade(side, f){
   if(!side || !f.res || !f.res.w) return null;
@@ -50,12 +59,12 @@ function lockInfo(uid, c){
   return { f, side, odds: side==="red"?f.oddsRed:f.oddsBlue, hit };
 }
 
-function players(){
+function players(){ return cached("players", ()=>{
   const ids = new Set(Object.keys(S.profiles));
-  S.picks.forEach(p=>ids.add(p.user_id));
+  for(const p of S.pickMap.values()) ids.add(p.user_id);
   return [...ids];
-}
-function standings(){
+}); }
+function standings(){ return cached("standings", ()=>{
   const rows = players().map(id=>{
     let w=0,l=0,lw=0,ll=0;
     for(const c of S.cards){
@@ -70,39 +79,101 @@ function standings(){
   });
   rows.sort((a,b)=>b.w-a.w || a.l-b.l || b.lw-a.lw || a.ll-b.ll || nameOf(a.id).localeCompare(nameOf(b.id)));
   return rows;
-}
+}); }
 
 /* ---------- data ---------- */
+function bump(){ S.ver++; }
+function putPick(r){ S.pickMap.set(pk(r.user_id,r.card_id,r.fight_id), { user_id:r.user_id, card_id:r.card_id, fight_id:r.fight_id, side:r.side }); }
+function putLock(r){ S.lockMap.set(lk(r.user_id,r.card_id), { user_id:r.user_id, card_id:r.card_id, fight_id:r.fight_id }); }
+
+// the database returns at most 1000 rows per request, so page through bigger tables
+async function fetchAll(build){
+  const out = [], size = 1000;
+  for(let from = 0; ; from += size){
+    const { data, error } = await build().range(from, from + size - 1);
+    if(error) return { data: out, error };
+    out.push(...(data || []));
+    if(!data || data.length < size) return { data: out, error: null };
+  }
+}
+let pickSince = 0;   // newest pick time we've seen (ms)
+function notePickTime(rows){ for(const r of rows){ const t = Date.parse(r.updated_at); if(t > pickSince) pickSince = t; } }
+
 async function loadAll(){
   const [cards, profiles, picks, locks, fighters] = await Promise.all([
     sb.from("cards").select("*").order("date",{ascending:false}),
-    sb.from("profiles").select("id,display_name"),
-    sb.from("picks").select("user_id,card_id,fight_id,side"),
-    sb.from("locks").select("user_id,card_id,fight_id"),
-    sb.from("fighters").select("name,record,recent,country")
+    fetchAll(()=>sb.from("profiles").select("id,display_name").order("id")),
+    fetchAll(()=>sb.from("picks").select("user_id,card_id,fight_id,side,updated_at").order("user_id").order("card_id").order("fight_id")),
+    fetchAll(()=>sb.from("locks").select("user_id,card_id,fight_id").order("user_id").order("card_id")),
+    fetchAll(()=>sb.from("fighters").select("name,record,recent,country").order("name"))
   ]);
   const err = cards.error || profiles.error || picks.error || locks.error;
   if(err){ toast("Couldn't load the league. Pull to refresh."); console.error(err); }
   S.cards = cards.data || [];
   S.profiles = Object.fromEntries((profiles.data||[]).map(p=>[p.id,p]));
-  S.picks = picks.data || [];
-  S.locks = locks.data || [];
+  S.pickMap = new Map(); (picks.data||[]).forEach(putPick); notePickTime(picks.data||[]);
+  S.lockMap = new Map(); (locks.data||[]).forEach(putLock);
   S.fighters = Object.fromEntries((fighters.data||[]).map(f=>[f.name,f]));
-  S.loaded = true;
+  S.loaded = true; lastRefresh = Date.now(); bump();
   render();
 }
-let reloadTimer = null;
-function scheduleReload(){ clearTimeout(reloadTimer); reloadTimer = setTimeout(loadAll, 400); }
+
+// other players' picks: fetch only what changed since last time (every minute while the page is open)
+async function syncPicks(){
+  if(!S.uid || !S.loaded) return;
+  const since = pickSince ? new Date(pickSince - 15000).toISOString() : null;
+  const { data, error } = await fetchAll(()=>{
+    let q = sb.from("picks").select("user_id,card_id,fight_id,side,updated_at");
+    if(since) q = q.gte("updated_at", since);
+    return q.order("updated_at").order("user_id").order("card_id").order("fight_id");
+  });
+  if(error || !data.length) return;
+  data.forEach(putPick); notePickTime(data); bump(); scheduleRender();
+}
+// when you come back to the page: small refresh instead of reloading the whole league
+let lastRefresh = 0;
+async function refreshLight(force){
+  if(!S.uid || !S.loaded || (!force && Date.now() - lastRefresh < 30000)) return;
+  lastRefresh = Date.now();
+  const c = currentCard();
+  const [cards, locks] = await Promise.all([
+    sb.from("cards").select("*").order("date",{ascending:false}),
+    c ? fetchAll(()=>sb.from("locks").select("user_id,card_id,fight_id").eq("card_id", c.id).order("user_id")) : Promise.resolve({ data:null })
+  ]);
+  if(cards.data) S.cards = cards.data;
+  if(c && locks.data && !locks.error){ for(const k of [...S.lockMap.keys()]) if(k.endsWith("|"+c.id)) S.lockMap.delete(k); locks.data.forEach(putLock); }
+  bump();
+  await syncPicks();
+  render();
+}
+let renderTimer = null;
+function scheduleRender(){ clearTimeout(renderTimer); renderTimer = setTimeout(render, 150); }
+
+// live updates: only small, rare changes come over the live connection (results, odds, locks, names, fighters).
+// each update carries just the changed row, so nobody re-downloads the league.
 let channel = null;
+function applyChange(table, p){
+  const n = p.new || {}, o = p.old || {}, del = p.eventType === "DELETE";
+  if(table === "cards"){
+    const id = del ? o.id : n.id;
+    S.cards = S.cards.filter(c=>c.id !== id);
+    if(!del && n.id) S.cards.push(n);
+    S.cards.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  } else if(table === "locks"){
+    const r = del ? o : n;
+    if(del) S.lockMap.delete(lk(r.user_id, r.card_id)); else putLock(n);
+  } else if(table === "profiles"){
+    if(del) delete S.profiles[o.id]; else S.profiles[n.id] = { id:n.id, display_name:n.display_name };
+  } else if(table === "fighters"){
+    if(del) delete S.fighters[o.name]; else S.fighters[n.name] = { name:n.name, record:n.record, recent:n.recent, country:n.country };
+  }
+  bump(); scheduleRender();
+}
 function subscribe(){
   if(channel) return;
-  channel = sb.channel("league")
-    .on("postgres_changes",{event:"*",schema:"public",table:"cards"},scheduleReload)
-    .on("postgres_changes",{event:"*",schema:"public",table:"picks"},scheduleReload)
-    .on("postgres_changes",{event:"*",schema:"public",table:"locks"},scheduleReload)
-    .on("postgres_changes",{event:"*",schema:"public",table:"profiles"},scheduleReload)
-    .on("postgres_changes",{event:"*",schema:"public",table:"fighters"},scheduleReload)
-    .subscribe();
+  channel = sb.channel("league");
+  ["cards","locks","profiles","fighters"].forEach(t=>channel.on("postgres_changes",{event:"*",schema:"public",table:t},p=>applyChange(t,p)));
+  channel.subscribe();
 }
 function unsubscribe(){ if(channel){ sb.removeChannel(channel); channel=null; } }
 
@@ -110,8 +181,7 @@ async function setPick(c, f, side){
   const prev = pickOf(S.uid, c.id, f.id);
   if(prev===side) return;
   // optimistic
-  S.picks = S.picks.filter(p=>!(p.user_id===S.uid && p.card_id===c.id && p.fight_id===f.id));
-  S.picks.push({user_id:S.uid, card_id:c.id, fight_id:f.id, side});
+  putPick({user_id:S.uid, card_id:c.id, fight_id:f.id, side}); bump();
   render();
   const { error } = await sb.from("picks").upsert({user_id:S.uid, card_id:c.id, fight_id:f.id, side, updated_at:new Date().toISOString()});
   if(error){ toast(cardLocked(c) ? "Picks are locked for this card." : "Couldn't save that pick. Try again."); loadAll(); }
@@ -119,13 +189,12 @@ async function setPick(c, f, side){
 async function toggleLock(c, f){
   const cur = lockRow(S.uid, c.id);
   if(cur && cur.fight_id===f.id){
-    S.locks = S.locks.filter(l=>!(l.user_id===S.uid && l.card_id===c.id)); render();
+    S.lockMap.delete(lk(S.uid,c.id)); bump(); render();
     const { error } = await sb.from("locks").delete().match({user_id:S.uid, card_id:c.id});
     if(error){ toast("Couldn't remove your lock. Try again."); loadAll(); }
     return;
   }
-  S.locks = S.locks.filter(l=>!(l.user_id===S.uid && l.card_id===c.id));
-  S.locks.push({user_id:S.uid, card_id:c.id, fight_id:f.id}); render();
+  putLock({user_id:S.uid, card_id:c.id, fight_id:f.id}); bump(); render();
   const { error } = await sb.from("locks").upsert({user_id:S.uid, card_id:c.id, fight_id:f.id, updated_at:new Date().toISOString()});
   if(error){ toast(cardLocked(c) ? "Locks are closed for this card." : "Couldn't save your lock. Try again."); loadAll(); }
 }
@@ -322,7 +391,7 @@ async function saveName(){
   const { error } = await sb.from("profiles").update({ display_name:name }).eq("id",S.uid);
   btn.disabled=false;
   if(error){ err.textContent="Couldn't save your username. Try again."; err.hidden=false; return; }
-  S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), display_name:name };
+  S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), display_name:name }; bump();
   input.value=""; render(); toast("Username updated.");
 }
 async function savePassword(){
@@ -538,7 +607,7 @@ function historyHTML(f){
 function locked0(c){ return cardLocked(c) || (c.fights||[]).some(f=>f.res&&f.res.w); }
 function crowdHTML(c,f){
   const red=[], blue=[];
-  S.picks.filter(p=>p.card_id===c.id && p.fight_id===f.id).forEach(p=>(p.side==="red"?red:blue).push(p.user_id));
+  picksForFight(c.id,f.id).forEach(p=>(p.side==="red"?red:blue).push(p.user_id));
   const n = red.length+blue.length;
   if(!n) return locked0(c) ? `<div class="crowd"><span class="note">Nobody picked this one.</span></div>` : "";
   const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${esc(nameOf(id))}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
@@ -574,7 +643,8 @@ function boardHTML(){
 }
 
 // last week's winner(s): most correct picks on the most recent fully graded card; ties all get a crown
-function lastWinners(){
+function lastWinners(){ return cached("winners", lastWinnersCalc); }
+function lastWinnersCalc(){
   const done = S.cards.filter(c=>(c.fights||[]).length && c.fights.every(f=>f.res && f.res.w))
     .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   if(!done.length) return { card:null, ids:new Set() };
@@ -707,7 +777,7 @@ $("#app").addEventListener("submit", async e=>{
 async function onSession(session){
   S.session = session; S.uid = session?.user?.id || null;
   if(S.uid){ S.loaded=false; render(); await loadAll(); subscribe(); syncPush(); }
-  else { unsubscribe(); S.cards=[]; S.picks=[]; S.locks=[]; S.profiles={}; S.loaded=false; S.page=null; S.prefs=null; S.push={subscribed:false,busy:false}; render(); }
+  else { unsubscribe(); S.cards=[]; S.pickMap=new Map(); S.lockMap=new Map(); S.profiles={}; bump(); S.loaded=false; S.page=null; S.prefs=null; S.push={subscribed:false,busy:false}; render(); }
 }
 sb.auth.onAuthStateChange((event, session)=>{
   if(event==="SIGNED_IN" || event==="SIGNED_OUT" || event==="INITIAL_SESSION"){
@@ -716,7 +786,8 @@ sb.auth.onAuthStateChange((event, session)=>{
 });
 // re-render when a card's lock time passes, and refresh when the tab comes back into view
 let lockSig="";
-setInterval(()=>{ const sig=S.cards.map(c=>cardLocked(c)?1:0).join(""); if(sig!==lockSig){ lockSig=sig; if(S.uid) loadAll(); } },30000);
-document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && S.uid) loadAll(); });
+setInterval(()=>{ const sig=S.cards.map(c=>cardLocked(c)?1:0).join(""); if(sig!==lockSig){ const first=!lockSig; lockSig=sig; if(S.uid && !first) refreshLight(true); else render(); } },30000);
+setInterval(()=>{ if(!document.hidden) syncPicks(); },60000);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && S.uid) refreshLight(false); });
 render();
 })();
