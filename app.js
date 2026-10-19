@@ -8,7 +8,7 @@ const sb = window.supabase.createClient(window.OP_CONFIG.supabaseUrl, window.OP_
 const S = {
   session: null, uid: null,
   cards: [], profiles: {}, picks: [], locks: [],
-  tab: "picks", cardId: null, authMode: "signin", loaded: false, viewUser: null
+  tab: "picks", cardId: null, authMode: "signin", loaded: false, viewUser: null, fighters: {}, openForm: new Set()
 };
 try { const t = localStorage.getItem("op-tab"); if (t === "picks" || t === "board") S.tab = t; } catch (e) {}
 
@@ -71,11 +71,12 @@ function standings(){
 
 /* ---------- data ---------- */
 async function loadAll(){
-  const [cards, profiles, picks, locks] = await Promise.all([
+  const [cards, profiles, picks, locks, fighters] = await Promise.all([
     sb.from("cards").select("*").order("date",{ascending:false}),
     sb.from("profiles").select("id,display_name"),
     sb.from("picks").select("user_id,card_id,fight_id,side"),
-    sb.from("locks").select("user_id,card_id,fight_id")
+    sb.from("locks").select("user_id,card_id,fight_id"),
+    sb.from("fighters").select("name,record,recent")
   ]);
   const err = cards.error || profiles.error || picks.error || locks.error;
   if(err){ toast("Couldn't load the league. Pull to refresh."); console.error(err); }
@@ -83,6 +84,7 @@ async function loadAll(){
   S.profiles = Object.fromEntries((profiles.data||[]).map(p=>[p.id,p]));
   S.picks = picks.data || [];
   S.locks = locks.data || [];
+  S.fighters = Object.fromEntries((fighters.data||[]).map(f=>[f.name,f]));
   S.loaded = true;
   render();
 }
@@ -96,6 +98,7 @@ function subscribe(){
     .on("postgres_changes",{event:"*",schema:"public",table:"picks"},scheduleReload)
     .on("postgres_changes",{event:"*",schema:"public",table:"locks"},scheduleReload)
     .on("postgres_changes",{event:"*",schema:"public",table:"profiles"},scheduleReload)
+    .on("postgres_changes",{event:"*",schema:"public",table:"fighters"},scheduleReload)
     .subscribe();
 }
 function unsubscribe(){ if(channel){ sb.removeChannel(channel); channel=null; } }
@@ -242,6 +245,7 @@ function picksHTML(){
       const rText = res.w==="draw" ? "Ruled a draw or no contest" : `${esc(res.w==="red"?f.red:f.blue)} won`;
       h += `<div class="result"><span class="pts ${mark==="W"?"hit":mark==="L"?"miss":""}">${mark}</span><span>${rText}${isLock?(L.hit==="push"?" · lock pushes":L.hit?" · lock hit":" · lock missed"):""}</span></div>`;
     }
+    h += historyHTML(f);
     h += crowdHTML(c,f);
     h += `</section>`;
   });
@@ -254,7 +258,29 @@ function fighterBtn(c,f,side,p,locked,res){
   const won = res && res.w===side;
   return `<button class="fighter ${side}${won?" won":""}" data-act="pick" data-fight="${esc(f.id)}" data-v="${side}" aria-pressed="${p===side}" ${locked?"disabled":""}>
     <span class="cn">${side==="red"?"Red corner":"Blue corner"}${won?" · Winner":""}</span><span class="nm">${esc(name)}</span>
-    <span class="od">${odds!=null?esc(fmtOdds(odds)):"Odds TBA"}</span></button>`;
+    <span class="od">${odds!=null?esc(fmtOdds(odds)):"Odds TBA"}</span>${formStrip(name)}</button>`;
+}
+// last-5 UFC results as little W/L chips, newest first
+function formStrip(name){
+  const fx = S.fighters[name]; if(!fx) return "";
+  if(!fx.recent || !fx.recent.length) return `<span class="form"><span class="form-debut">UFC debut</span></span>`;
+  return `<span class="form" aria-label="Last ${fx.recent.length} UFC fights">${fx.recent.map(r=>`<i class="fr ${esc(String(r.res).toLowerCase())}">${esc(r.res)}</i>`).join("")}</span>`;
+}
+function fmtShort(d){ try{ return new Date(d+"T12:00:00").toLocaleDateString(undefined,{month:"short",year:"2-digit"}); }catch(e){ return d; } }
+function historyCol(name, side){
+  const fx = S.fighters[name];
+  let h = `<div class="hcol ${side}"><div class="hname">${esc(name)}</div>`;
+  if(!fx){ return h + `<p class="note" style="margin:0">History not loaded yet.</p></div>`; }
+  h += fx.record ? `<div class="hrec">${esc(fx.record)} pro record</div>` : "";
+  if(!fx.recent || !fx.recent.length) return h + `<p class="note" style="margin:0">No UFC fights yet. This is their UFC debut.</p></div>`;
+  h += `<ol class="hlist">${fx.recent.map(r=>`<li><i class="fr ${esc(String(r.res).toLowerCase())}">${esc(r.res)}</i><div class="hmain"><span class="hopp">vs ${esc(r.opp)}</span><span class="hmeta">${esc(r.method||"")}${r.round?` · R${esc(r.round)}`:""} · ${esc(fmtShort(r.date))}</span></div></li>`).join("")}</ol>`;
+  if(fx.recent.length<5) h += `<p class="note" style="margin:0">${fx.recent.length} UFC ${fx.recent.length===1?"fight":"fights"} so far.</p>`;
+  return h + `</div>`;
+}
+function historyHTML(f){
+  const open = S.openForm.has(f.id);
+  return `<button class="histbtn" data-act="hist" data-fight="${esc(f.id)}" aria-expanded="${open}">${open?"Hide":"Show"} last 5 UFC fights</button>
+    ${open?`<div class="hist">${historyCol(f.red,"red")}${historyCol(f.blue,"blue")}</div>`:""}`;
 }
 function locked0(c){ return cardLocked(c) || (c.fights||[]).some(f=>f.res&&f.res.w); }
 function crowdHTML(c,f){
@@ -359,6 +385,7 @@ $("#app").addEventListener("click", e=>{
   if(act==="player"){ S.viewUser=b.dataset.uid; S.tab="board"; render(); window.scrollTo(0,0); return; }
   if(act==="back"){ S.viewUser=null; render(); return; }
   if(act==="pcard"){ S.cardId=b.dataset.card; render(); return; }
+  if(act==="hist"){ const id=b.dataset.fight; S.openForm.has(id)?S.openForm.delete(id):S.openForm.add(id); render(); return; }
   const c=currentCard(); if(!c) return;
   const f=(c.fights||[]).find(x=>x.id===b.dataset.fight); if(!f) return;
   if(act==="pick") setPick(c,f,b.dataset.v);
