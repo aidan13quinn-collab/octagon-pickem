@@ -249,3 +249,13 @@ img{max-width:100%}
 .flag{display:inline-block;width:20px;height:14px;object-fit:cover;border-radius:2px;vertical-align:-1px;box-shadow:0 0 0 1px color-mix(in srgb,var(--ink) 15%,transparent);margin:0 6px 0 0}
 .fighter.blue .nm .flag{margin:0 0 0 6px}
 .hname .flag{margin-right:6px}
+/* install banner */
+.install{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--gold);border-radius:10px;padding:10px 12px}
+.install img{border-radius:9px;flex:none}
+.ins-t{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;font-size:13px;color:var(--muted)}
+.ins-t > b{font-family:var(--f-label);font-weight:700;font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink)}
+.ins-t span b{color:var(--ink)}
+.shareico{display:inline-block;font-weight:700;color:var(--blue)}
+.ins-x{appearance:none;background:none;border:0;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:2px 4px;flex:none}
+/* installed app: keep the header clear of the status bar */
+@media (display-mode: standalone){ header.band{padding-top:calc(16px + env(safe-area-inset-top,0px))} }

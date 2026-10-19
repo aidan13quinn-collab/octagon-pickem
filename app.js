@@ -188,6 +188,25 @@ function cardSelect(){
   return `<select id="sel-card" aria-label="Fight card">${S.cards.map(c=>`<option value="${esc(c.id)}" ${c.id===S.cardId?"selected":""}>${esc(c.name)}${c.date?" · "+esc(fmtDate(c.date)):""}</option>`).join("")}</select>`;
 }
 
+/* ---------- install as an app ---------- */
+let deferredInstall = null;
+const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+function installDismissed(){ try{ return localStorage.getItem("fw-install-dismissed")==="1"; }catch(e){ return false; } }
+function installHTML(){
+  if(isStandalone() || installDismissed()) return "";
+  if(deferredInstall){
+    return `<div class="install"><img src="/icons/icon-192.png" alt="" width="40" height="40"><div class="ins-t"><b>Get the Fight Week app</b><span>Add it to your home screen for one-tap picks.</span></div><button class="btn gold sm" data-act="install">Install</button><button class="ins-x" data-act="install-x" aria-label="Dismiss">×</button></div>`;
+  }
+  if(isIOS()){
+    return `<div class="install"><img src="/icons/icon-192.png" alt="" width="40" height="40"><div class="ins-t"><b>Get the Fight Week app</b><span>In Safari, tap the Share button <span class="shareico" aria-hidden="true">⬆︎</span>, then <b>Add to Home Screen</b>.</span></div><button class="ins-x" data-act="install-x" aria-label="Dismiss">×</button></div>`;
+  }
+  return "";
+}
+window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferredInstall = e; render(); });
+window.addEventListener("appinstalled", ()=>{ deferredInstall = null; render(); toast("Fight Week is on your home screen."); });
+if("serviceWorker" in navigator){ window.addEventListener("load", ()=>{ navigator.serviceWorker.register("/sw.js").catch(()=>{}); }); }
+
 function picksHTML(){
   const c = currentCard();
   if(!c) return emptyHTML("No fight card yet","The next UFC card is added automatically. Check back soon.");
@@ -199,7 +218,7 @@ function picksHTML(){
   fights.forEach(f=>{ const g=grade(pickOf(S.uid,c.id,f.id),f); if(g===1) cw++; else if(g===0) cl++; });
   const locked = cardLocked(c);
 
-  let h = `<div class="cardpick"><div class="event-head">
+  let h = installHTML() + `<div class="cardpick"><div class="event-head">
       <h2>${esc(c.name)}</h2>
       ${c.date?`<span class="label">${esc(fmtDate(c.date))}</span>`:""}
       <span class="pill ${locked?"locked":"open"}">${locked?"Picks locked":(c.lock_at?`Picks lock ${esc(fmtLockAt(c))}`:"Picks open")}</span>
@@ -396,6 +415,8 @@ $("#app").addEventListener("click", e=>{
   const b=e.target.closest("[data-act]"); if(!b || b.disabled) return;
   const act=b.dataset.act;
   if(act==="mode"){ S.authMode=b.dataset.v; render(); return; }
+  if(act==="install" && deferredInstall){ deferredInstall.prompt(); deferredInstall.userChoice.finally(()=>{ deferredInstall=null; render(); }); return; }
+  if(act==="install-x"){ try{ localStorage.setItem("fw-install-dismissed","1"); }catch(e){} render(); return; }
   if(act==="player"){ S.viewUser=b.dataset.uid; S.tab="board"; render(); window.scrollTo(0,0); return; }
   if(act==="back"){ S.viewUser=null; render(); return; }
   if(act==="pcard"){ S.cardId=b.dataset.card; render(); return; }
