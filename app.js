@@ -242,10 +242,10 @@ function picksHTML(){
       const rText = res.w==="draw" ? "Ruled a draw or no contest" : `${esc(res.w==="red"?f.red:f.blue)} won`;
       h += `<div class="result"><span class="pts ${mark==="W"?"hit":mark==="L"?"miss":""}">${mark}</span><span>${rText}${isLock?(L.hit==="push"?" · lock pushes":L.hit?" · lock hit":" · lock missed"):""}</span></div>`;
     }
-    if(locked || res) h += crowdHTML(c,f);
+    h += crowdHTML(c,f);
     h += `</section>`;
   });
-  h += `<div class="panel"><h3>How it works</h3><p class="note" style="margin:0">Pick a winner in every fight to build your record. Then mark one of your picks as your lock of the week; locks keep their own record. Draws, no contests and cancelled bouts don't count either way. Everyone's picks and locks are revealed when the first fight starts.</p></div>`;
+  h += `<div class="panel"><h3>How it works</h3><p class="note" style="margin:0">Pick a winner in every fight to build your record. Then mark one of your picks as your lock of the week; locks keep their own record. Draws, no contests and cancelled bouts don't count either way. Everyone can see each other's picks and locks anytime. Picks lock when the first fight starts.</p></div>`;
   return h;
 }
 function fighterBtn(c,f,side,p,locked,res){
@@ -256,11 +256,12 @@ function fighterBtn(c,f,side,p,locked,res){
     <span class="cn">${side==="red"?"Red corner":"Blue corner"}${won?" · Winner":""}</span><span class="nm">${esc(name)}</span>
     <span class="od">${odds!=null?esc(fmtOdds(odds)):"Odds TBA"}</span></button>`;
 }
+function locked0(c){ return cardLocked(c) || (c.fights||[]).some(f=>f.res&&f.res.w); }
 function crowdHTML(c,f){
   const red=[], blue=[];
   S.picks.filter(p=>p.card_id===c.id && p.fight_id===f.id).forEach(p=>(p.side==="red"?red:blue).push(p.user_id));
   const n = red.length+blue.length;
-  if(!n) return `<div class="crowd"><span class="note">Nobody picked this one.</span></div>`;
+  if(!n) return locked0(c) ? `<div class="crowd"><span class="note">Nobody picked this one.</span></div>` : "";
   const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${esc(nameOf(id))}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
   return `<div class="crowd"><span class="label">League picks · ${red.length}–${blue.length}</span>
     <div class="bar" aria-hidden="true"><i style="width:${red.length/n*100}%;background:var(--red)"></i><i style="width:${blue.length/n*100}%;background:var(--blue)"></i></div>
@@ -268,19 +269,28 @@ function crowdHTML(c,f){
     <div class="who"><span style="color:var(--blue)">${esc(f.blue)}:</span>${blue.map(desc).join("")||"<span>none</span>"}</div></div>`;
 }
 
+// this week's lock for a player, shown under their name
+function lockTag(uid){
+  const c = currentCard(); if(!c) return "";
+  const L = lockInfo(uid,c); if(!L) return "";
+  const nm = L.side==="red"?L.f.red:L.f.blue;
+  const st = L.hit===null ? "" : L.hit==="push" ? " · push" : L.hit ? " · hit" : " · missed";
+  return `<span class="locktag ${L.hit===true?"hit":L.hit===false?"miss":""}">${lockSVG}<span>${esc(nm)}${st}</span></span>`;
+}
 function boardHTML(){
   if(S.viewUser) return playerHTML(S.viewUser);
   const rows = standings();
   if(!rows.length) return emptyHTML("No one's on the board yet","Make a pick to join. Standings fill in as results come in.");
+  const cc = currentCard();
   let h = `<div class="event-head"><h2>Season standings</h2><span class="label">${rows.length} ${rows.length===1?"player":"players"}</span></div>`;
   if(!rows.some(r=>r.w+r.l>0)) h += `<p class="note">No results yet. Everyone starts at 0–0.</p>`;
   h += `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
   rows.forEach((r,i)=>{
     h += `<tr class="${i===0&&r.w>0?"top":""}"><td class="rk">${i+1}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span>${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span><span class="chev" aria-hidden="true">›</span></button></td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id)}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
-  h += `</tbody></table></div><p class="note">Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
+  h += `</tbody></table></div><p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
   return h;
 }
 
@@ -294,7 +304,7 @@ function playerHTML(uid){
   const r = standings().find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0};
   let h = `<button class="backbtn" data-act="back">‹ Standings</button>
     <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${esc(nameOf(uid))}${me?" (you)":""}</h2>
-      <div class="pstats"><span><b>${r.w}–${r.l}</b> picks</span><span class="lk-stat"><b>${r.lw}–${r.ll}</b> locks</span></div></div></div>`;
+      <div class="pstats"><span><b>${r.w}–${r.l}</b> picks</span><span class="lk-stat"><b>${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
   const c = currentCard();
   if(!c) return h + emptyHTML("No cards yet","Their picks will show up here once a card is posted.");
 
@@ -309,9 +319,6 @@ function playerHTML(uid){
   }
 
   h += `<div class="cardpick"><div class="event-head"><h2>${esc(c.name)}</h2>${c.date?`<span class="label">${esc(fmtDate(c.date))}</span>`:""}</div>${cardSelect()}</div>`;
-  if(!me && !cardLocked(c)){
-    return h + `<div class="empty"><h3>Picks are hidden</h3><p>${esc(nameOf(uid))}'s picks for this card unlock when the first fight starts${c.lock_at?`, ${esc(fmtLockAt(c))}`:""}. No peeking.</p></div>`;
-  }
   const fights = c.fights||[];
   const L = lockInfo(uid,c);
   const cr = cardRecord(uid,c);

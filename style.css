@@ -212,3 +212,8 @@ img{max-width:100%}
 .pf.winner::after{content:" ✓";color:var(--good)}
 .pright{display:flex;align-items:center;gap:8px;flex:none}
 .pright .pts{font-size:20px}
+.nmstack{display:flex;flex-direction:column;gap:2px;min-width:0}
+.locktag{display:inline-flex;align-items:center;gap:4px;font-family:var(--f-label);font-weight:600;font-size:13px;color:var(--gold);letter-spacing:.02em;text-transform:uppercase}
+.locktag svg{width:12px;height:12px;flex:none}
+.locktag.hit{color:var(--good)} .locktag.miss{color:var(--bad)}
+.pmeta .locktag{margin-top:6px}
