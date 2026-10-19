@@ -237,3 +237,11 @@ img{max-width:100%}
 .hmain{display:flex;flex-direction:column;min-width:0}
 .hopp{font-weight:600;font-size:14px;overflow-wrap:anywhere}
 .hmeta{font-size:12px;color:var(--muted)}
+/* per-fighter history toggles, under each corner */
+.histrow{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;margin-top:-4px}
+.histrow > span{width:22px}
+.histbtn.blue{justify-self:end}
+.histbtn.red{justify-self:start}
+.histbtn{text-decoration:none;display:inline-flex;gap:4px;align-items:center;padding:4px 2px}
+.histbtn:hover{color:var(--ink)}
+.hist{grid-template-columns:1fr}

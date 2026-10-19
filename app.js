@@ -258,7 +258,7 @@ function fighterBtn(c,f,side,p,locked,res){
   const won = res && res.w===side;
   return `<button class="fighter ${side}${won?" won":""}" data-act="pick" data-fight="${esc(f.id)}" data-v="${side}" aria-pressed="${p===side}" ${locked?"disabled":""}>
     <span class="cn">${side==="red"?"Red corner":"Blue corner"}${won?" · Winner":""}</span><span class="nm">${esc(name)}</span>
-    <span class="od">${odds!=null?esc(fmtOdds(odds)):"Odds TBA"}</span>${formStrip(name)}</button>`;
+    <span class="od">${odds!=null?esc(fmtOdds(odds)):"Odds TBA"}</span></button>`;
 }
 // last-5 UFC results as little W/L chips, newest first
 function formStrip(name){
@@ -278,9 +278,17 @@ function historyCol(name, side){
   return h + `</div>`;
 }
 function historyHTML(f){
-  const open = S.openForm.has(f.id);
-  return `<button class="histbtn" data-act="hist" data-fight="${esc(f.id)}" aria-expanded="${open}">${open?"Hide":"Show"} last 5 UFC fights</button>
-    ${open?`<div class="hist">${historyCol(f.red,"red")}${historyCol(f.blue,"blue")}</div>`:""}`;
+  const key = side => f.id+":"+side;
+  const tog = side => {
+    const open = S.openForm.has(key(side));
+    const fx = S.fighters[side==="red"?f.red:f.blue];
+    const n = fx && fx.recent ? fx.recent.length : 0;
+    const label = fx && !n ? "UFC debut" : `Last ${n && n<5 ? n : 5} fights`;
+    return `<button class="histbtn ${side}" data-act="hist" data-key="${esc(key(side))}" aria-expanded="${open}">${label} <span aria-hidden="true">${open?"▴":"▾"}</span></button>`;
+  };
+  let h = `<div class="histrow">${tog("red")}<span></span>${tog("blue")}</div>`;
+  ["red","blue"].forEach(side=>{ if(S.openForm.has(key(side))) h += `<div class="hist">${historyCol(side==="red"?f.red:f.blue, side)}</div>`; });
+  return h;
 }
 function locked0(c){ return cardLocked(c) || (c.fights||[]).some(f=>f.res&&f.res.w); }
 function crowdHTML(c,f){
@@ -385,7 +393,7 @@ $("#app").addEventListener("click", e=>{
   if(act==="player"){ S.viewUser=b.dataset.uid; S.tab="board"; render(); window.scrollTo(0,0); return; }
   if(act==="back"){ S.viewUser=null; render(); return; }
   if(act==="pcard"){ S.cardId=b.dataset.card; render(); return; }
-  if(act==="hist"){ const id=b.dataset.fight; S.openForm.has(id)?S.openForm.delete(id):S.openForm.add(id); render(); return; }
+  if(act==="hist"){ const k=b.dataset.key; S.openForm.has(k)?S.openForm.delete(k):S.openForm.add(k); render(); return; }
   const c=currentCard(); if(!c) return;
   const f=(c.fights||[]).find(x=>x.id===b.dataset.fight); if(!f) return;
   if(act==="pick") setPick(c,f,b.dataset.v);
