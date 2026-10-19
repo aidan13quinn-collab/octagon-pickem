@@ -658,7 +658,8 @@ function lastWinnersCalc(){
 const crownSVG = `<svg viewBox="0 0 24 18" width="18" height="14" aria-hidden="true"><path d="M2 15 L1 4 L7 9 L12 1 L17 9 L23 4 L22 15 Z" fill="currentColor"/><rect x="2" y="15.5" width="20" height="2.5" rx="1" fill="currentColor"/></svg>`;
 // league commissioner (the person who built and runs Fight Week)
 const COMMISSIONER_ID = "414eba8d-669f-4cbb-8976-abb42c12c228";
-function commish(uid){ return uid===COMMISSIONER_ID ? `<span class="commish" title="League commissioner">Commish</span>` : ""; }
+const commishSVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8 3.5 5v6.2c0 5.3 3.6 9.6 8.5 11 4.9-1.4 8.5-5.7 8.5-11V5L12 1.8z" fill="currentColor"/><path d="m12 6.6 1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z" fill="var(--commish-star)"/></svg>`;
+function commish(uid){ return uid===COMMISSIONER_ID ? `<span class="commish" title="League commissioner" role="img" aria-label="Commissioner">${commishSVG}</span>` : ""; }
 function crown(uid){
   const W = lastWinners();
   return W.ids.has(uid) ? `<span class="crown" title="Won ${esc(W.card.name)}">${crownSVG}</span>` : "";
