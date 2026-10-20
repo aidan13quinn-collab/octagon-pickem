@@ -45,10 +45,16 @@ function picksForFight(cardId, fightId){
   return idx.get(cardId+"|"+fightId) || [];
 }
 // 1 = correct, 0 = wrong, null = not graded / doesn't count
-function grade(side, f){
-  if(!side || !f.res || !f.res.w) return null;
+// owes = the player was in the league before this card locked, so a missing pick counts as a miss
+function grade(side, f, owes){
+  if(!f.res || !f.res.w) return null;
   if(f.res.w==="cancelled" || f.res.w==="draw") return null;
+  if(!side) return owes ? 0 : null;
   return side===f.res.w ? 1 : 0;
+}
+function owes(uid, c){
+  const j = S.profiles[uid]?.created_at;
+  return !j || !c.lock_at || Date.parse(j) <= Date.parse(c.lock_at);
 }
 function lockInfo(uid, c){
   const l = lockRow(uid, c.id); if(!l) return null;
@@ -69,7 +75,7 @@ function standings(){ return cached("standings", ()=>{
     let w=0,l=0,lw=0,ll=0;
     for(const c of S.cards){
       for(const f of (c.fights||[])){
-        const g = grade(pickOf(id,c.id,f.id), f);
+        const g = grade(pickOf(id,c.id,f.id), f, owes(id,c));
         if(g===1) w++; else if(g===0) l++;
       }
       const L = lockInfo(id,c);
@@ -102,7 +108,7 @@ function notePickTime(rows){ for(const r of rows){ const t = Date.parse(r.update
 async function loadAll(){
   const [cards, profiles, picks, locks, fighters] = await Promise.all([
     sb.from("cards").select("*").order("date",{ascending:false}),
-    fetchAll(()=>sb.from("profiles").select("id,display_name").order("id")),
+    fetchAll(()=>sb.from("profiles").select("id,display_name,created_at").order("id")),
     fetchAll(()=>sb.from("picks").select("user_id,card_id,fight_id,side,updated_at").order("user_id").order("card_id").order("fight_id")),
     fetchAll(()=>sb.from("locks").select("user_id,card_id,fight_id").order("user_id").order("card_id")),
     fetchAll(()=>sb.from("fighters").select("name,record,recent,country").order("name"))
@@ -163,7 +169,7 @@ function applyChange(table, p){
     const r = del ? o : n;
     if(del) S.lockMap.delete(lk(r.user_id, r.card_id)); else putLock(n);
   } else if(table === "profiles"){
-    if(del) delete S.profiles[o.id]; else S.profiles[n.id] = { id:n.id, display_name:n.display_name };
+    if(del) delete S.profiles[o.id]; else S.profiles[n.id] = { id:n.id, display_name:n.display_name, created_at:n.created_at };
   } else if(table === "fighters"){
     if(del) delete S.fighters[o.name]; else S.fighters[n.name] = { name:n.name, record:n.record, recent:n.recent, country:n.country };
   }
@@ -509,7 +515,7 @@ function picksHTML(){
   const done = live.filter(f=>pickOf(S.uid,c.id,f.id)).length;
   const L = lockInfo(S.uid, c);
   let cw=0, cl=0;
-  fights.forEach(f=>{ const g=grade(pickOf(S.uid,c.id,f.id),f); if(g===1) cw++; else if(g===0) cl++; });
+  fights.forEach(f=>{ const g=grade(pickOf(S.uid,c.id,f.id),f,owes(S.uid,c)); if(g===1) cw++; else if(g===0) cl++; });
   const locked = cardLocked(c);
 
   let h = `<div class="cardpick"><div class="event-head">
@@ -553,7 +559,7 @@ function picksHTML(){
       h += `<p class="note" style="margin:0">Tap a fighter to pick the winner.</p>`;
     }
     if(res){
-      const g = grade(p,f);
+      const g = grade(p,f,owes(S.uid,c));
       const mark = res.w==="draw" ? "P" : (g===null ? "–" : (g ? "W" : "L"));
       const rText = res.w==="draw" ? "Ruled a draw or no contest" : `${esc(res.w==="red"?f.red:f.blue)} won`;
       h += `<div class="result"><span class="pts ${mark==="W"?"hit":mark==="L"?"miss":""}">${mark}</span><span>${rText}${isLock?(L.hit==="push"?" · lock pushes":L.hit?" · lock hit":" · lock missed"):""}</span></div>`;
@@ -643,7 +649,7 @@ function boardHTML(){
       <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${commish(r.id)}${esc(nameOf(r.id))}${crown(r.id)}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id)}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
-  h += `</tbody></table></div><p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. Draws, no contests and cancelled bouts don't count.</p>`;
+  h += `</tbody></table></div><p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. A fight you didn't pick counts as a miss. Draws, no contests and cancelled bouts don't count.</p>`;
   return h;
 }
 
@@ -670,7 +676,7 @@ function crown(uid){
 }
 function cardRecord(uid, c){
   let w=0,l=0;
-  (c.fights||[]).forEach(f=>{ const g=grade(pickOf(uid,c.id,f.id),f); if(g===1) w++; else if(g===0) l++; });
+  (c.fights||[]).forEach(f=>{ const g=grade(pickOf(uid,c.id,f.id),f,owes(uid,c)); if(g===1) w++; else if(g===0) l++; });
   return {w,l};
 }
 function playerHTML(uid){
@@ -701,14 +707,14 @@ function playerHTML(uid){
   fights.forEach(f=>{
     const p = pickOf(uid,c.id,f.id);
     const off = isOff(f);
-    const g = grade(p,f);
+    const g = grade(p,f,owes(uid,c));
     const res = f.res && f.res.w;
     const mark = off ? "" : res==="draw" ? "P" : (g===null ? "" : (g?"W":"L"));
     const isLock = L && L.f.id===f.id;
     const side = s => `<span class="pf ${s} ${p===s?"chosen":""} ${res===s?"winner":""}">${esc(s==="red"?f.red:f.blue)}</span>`;
     h += `<div class="prow ${off?"off":""}">
       <div class="pnames">${side("red")}<span class="vs">vs</span>${side("blue")}</div>
-      <div class="pright">${isLock?'<span class="lk">LOCK</span>':""}${off?'<span class="pill locked">Cancelled</span>':!p?'<span class="note">No pick</span>':mark?`<span class="pts ${mark==="W"?"hit":mark==="L"?"miss":""}">${mark}</span>`:'<span class="note">Pending</span>'}</div>
+      <div class="pright">${isLock?'<span class="lk">LOCK</span>':""}${off?'<span class="pill locked">Cancelled</span>':!p?(mark==="L"?'<span class="note">No pick</span> <span class="pts miss">L</span>':'<span class="note">No pick</span>'):mark?`<span class="pts ${mark==="W"?"hit":mark==="L"?"miss":""}">${mark}</span>`:'<span class="note">Pending</span>'}</div>
     </div>`;
   });
   h += `</div>`;
