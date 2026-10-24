@@ -533,7 +533,7 @@ function picksHTML(){
       <h2>${esc(c.name)}</h2>
       ${c.date?`<span class="label">${esc(fmtDate(c.date))}</span>`:""}
       <span class="pill ${locked?"locked":"open"}">${locked?"Picks locked":(c.lock_at?`Picks lock ${esc(fmtLockAt(c))}`:"Picks open")}</span>
-      ${cw+cl?`<span class="pill gold">${cw}–${cl} this card</span>`:""}
+      ${cw+cl?`<span class="pill gold"><span class="nw">${cw}–${cl}</span> this card</span>`:""}
     </div>${cardSelect()}</div>`;
 
   if(fights.length){
@@ -607,7 +607,7 @@ function historyCol(name, side){
   const fx = S.fighters[name];
   let h = `<div class="hcol ${side}"><div class="hname">${flag(name)}${esc(name)}</div>`;
   if(!fx){ return h + `<p class="note" style="margin:0">History not loaded yet.</p></div>`; }
-  h += fx.record ? `<div class="hrec">${esc(fx.record)} pro record</div>` : "";
+  h += fx.record ? `<div class="hrec"><span class="nw">${esc(fx.record)}</span> pro record</div>` : "";
   if(!fx.recent || !fx.recent.length) return h + `<p class="note" style="margin:0">No UFC fights yet. This is their UFC debut.</p></div>`;
   h += `<ol class="hlist">${fx.recent.map(r=>`<li><i class="fr ${esc(String(r.res).toLowerCase())}">${esc(r.res)}</i><div class="hmain"><span class="hopp">vs ${esc(r.opp)}</span><span class="hmeta">${esc(r.method||"")}${r.round?` · R${esc(r.round)}`:""} · ${esc(fmtShort(r.date))}</span></div></li>`).join("")}</ol>`;
   if(fx.recent.length<5) h += `<p class="note" style="margin:0">${fx.recent.length} UFC ${fx.recent.length===1?"fight":"fights"} so far.</p>`;
@@ -633,17 +633,18 @@ function crowdHTML(c,f){
   const n = red.length+blue.length;
   if(!n) return locked0(c) ? `<div class="crowd"><span class="note">Nobody picked this one.</span></div>` : "";
   const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${commish(id)}${esc(nameOf(id))}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
-  return `<div class="crowd"><span class="label">League picks · ${red.length}–${blue.length}</span>
+  return `<div class="crowd"><span class="label">League picks · <span class="nw">${red.length}–${blue.length}</span></span>
     <div class="bar" aria-hidden="true"><i style="width:${red.length/n*100}%;background:var(--red)"></i><i style="width:${blue.length/n*100}%;background:var(--blue)"></i></div>
     <div class="who"><span style="color:var(--red)">${esc(f.red)}:</span>${red.map(desc).join("")||"<span>none</span>"}</div>
     <div class="who"><span style="color:var(--blue)">${esc(f.blue)}:</span>${blue.map(desc).join("")||"<span>none</span>"}</div></div>`;
 }
 
 // this week's lock for a player, shown under their name
-function lockTag(uid){
+function lockTag(uid, short){
   const c = currentCard(); if(!c) return "";
   const L = lockInfo(uid,c); if(!L) return "";
-  const nm = L.side==="red"?L.f.red:L.f.blue;
+  let nm = L.side==="red"?L.f.red:L.f.blue;
+  if(short) nm = String(nm).trim().split(/\s+/).pop(); // standings: last name only so it fits on one line
   const st = L.hit===null ? "" : L.hit==="push" ? " · push" : L.hit ? " · hit" : " · missed";
   return `<span class="locktag ${L.hit===true?"hit":L.hit===false?"miss":""}">${lockSVG}<span>${esc(nm)}${st}</span></span>`;
 }
@@ -657,7 +658,7 @@ function boardHTML(){
   h += `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
   rows.forEach((r,i)=>{
     h += `<tr class="${i===0&&r.w>0?"top":""}"><td class="rk">${i+1}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${commish(r.id)}${esc(nameOf(r.id))}${crown(r.id)}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id)}</span><span class="chev" aria-hidden="true">›</span></button></td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${commish(r.id)}${esc(nameOf(r.id))}${crown(r.id)}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id,true)}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
   h += `</tbody></table></div><p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. A fight you didn't pick counts as a miss. Draws, no contests and cancelled bouts don't count.</p>`;
@@ -695,7 +696,7 @@ function playerHTML(uid){
   const r = standings().find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0};
   let h = `<button class="backbtn" data-act="back">‹ Standings</button>
     <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${commish(uid)}${esc(nameOf(uid))}${crown(uid)}${me?" (you)":""}</h2>
-      <div class="pstats"><span><b>${r.w}–${r.l}</b> picks</span><span class="lk-stat"><b>${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
+      <div class="pstats"><span><b class="nw">${r.w}–${r.l}</b> picks</span><span class="lk-stat"><b class="nw">${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
   const c = currentCard();
   if(!c) return h + emptyHTML("No cards yet","Their picks will show up here once a card is posted.");
 
@@ -705,7 +706,7 @@ function playerHTML(uid){
     h += `<div class="cardhist">${past.map(x=>{
       const cr = cardRecord(uid,x), L = lockInfo(uid,x);
       const lk = L ? (L.hit===null?"lock pending":L.hit==="push"?"lock push":L.hit?"lock hit":"lock missed") : "no lock";
-      return `<button class="ch ${x.id===c.id?"on":""}" data-act="pcard" data-card="${esc(x.id)}"><span class="ch-n">${esc(x.name)}</span><span class="ch-r">${cr.w}–${cr.l} · ${lk}</span></button>`;
+      return `<button class="ch ${x.id===c.id?"on":""}" data-act="pcard" data-card="${esc(x.id)}"><span class="ch-n">${esc(x.name)}</span><span class="ch-r"><span class="nw">${cr.w}–${cr.l}</span> · ${lk}</span></button>`;
     }).join("")}</div>`;
   }
 
@@ -713,7 +714,7 @@ function playerHTML(uid){
   const fights = c.fights||[];
   const L = lockInfo(uid,c);
   const cr = cardRecord(uid,c);
-  h += `<p class="note">${cr.w+cr.l?`${cr.w}–${cr.l} on this card. `:""}${L?`Lock: ${esc(L.side==="red"?L.f.red:L.f.blue)}${L.hit===null?"":L.hit==="push"?" (push)":L.hit?" (hit)":" (missed)"}.`:"No lock on this card."}</p>`;
+  h += `<p class="note">${cr.w+cr.l?`<span class="nw">${cr.w}–${cr.l}</span> on this card. `:""}${L?`Lock: ${esc(L.side==="red"?L.f.red:L.f.blue)}${L.hit===null?"":L.hit==="push"?" (push)":L.hit?" (hit)":" (missed)"}.`:"No lock on this card."}</p>`;
   h += `<div class="plist">`;
   fights.forEach(f=>{
     const p = pickOf(uid,c.id,f.id);

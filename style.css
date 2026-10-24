@@ -147,6 +147,13 @@ table.board{width:100%;border-collapse:collapse;font-variant-numeric:tabular-num
 .board td.nm div{display:flex;align-items:center;gap:8px;font-weight:600;min-width:0}
 .board td.nm img{width:24px;height:24px;border-radius:50%;flex:none}
 .board td.tot{font-family:var(--f-display);font-weight:900;font-size:24px}
+.board th,.board td.tot,.board td.lockrec{white-space:nowrap}
+.board td.nm{width:100%;max-width:0}
+.board td.nm .namebtn{width:100%}
+.board td.nm .nmstack{flex:1}
+.board td.nm .nmstack>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board td.nm .locktag{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.board td.nm .locktag svg{display:inline-block;vertical-align:-1px;margin-right:4px}
 .boardwrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 12px;overflow-x:auto}
 .rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .rule{border-left:3px solid var(--gold);padding:2px 0 2px 10px}
@@ -312,3 +319,5 @@ img{max-width:100%}
 .pmeta h2 .commish svg{width:24px;height:24px}
 .namelink .commish{margin-right:3px}
 .namelink .commish svg{width:13px;height:13px}
+/* records (10–3, 28-4-0) never break across lines */
+.nw{white-space:nowrap}
