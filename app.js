@@ -258,13 +258,24 @@ function authHTML(){
   </section>`;
 }
 
+// midnight (local time) at the start of the Monday after the card's event date
+function showUntil(c){
+  if(!c.date) return 0;
+  const [y,m,d] = String(c.date).split("-").map(Number);
+  const t = new Date(y, m-1, d);
+  if(isNaN(t)) return 0;
+  t.setDate(t.getDate() + (((8 - t.getDay()) % 7) || 7));
+  return t.getTime();
+}
 function currentCard(){
   if(!S.cards.length) return null;
   let c = S.cards.find(x=>x.id===S.cardId);
   if(!c){
-    // default: the soonest card that hasn't locked yet, otherwise the most recent
+    // default: a card that's already locked stays up through fight weekend (until the Monday after
+    // its event); otherwise the soonest card that hasn't locked yet, otherwise the most recent
+    const live = S.cards.filter(x=>cardLocked(x) && Date.now() < showUntil(x)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     const open = S.cards.filter(x=>!cardLocked(x)).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    c = open[0] || S.cards[0];
+    c = live[0] || open[0] || S.cards[0];
     S.cardId = c.id;
   }
   return c;
