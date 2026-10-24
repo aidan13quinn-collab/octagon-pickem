@@ -141,7 +141,7 @@ table.board{width:100%;border-collapse:collapse;font-variant-numeric:tabular-num
 .board th{font-family:var(--f-label);font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);text-align:right;padding:8px 6px;border-bottom:1px solid var(--line)}
 .board th:nth-child(2){text-align:left}
 .board td{padding:12px 6px;border-bottom:1px solid var(--line);text-align:right}
-.board td.rk{font-family:var(--f-display);font-weight:900;font-size:22px;color:var(--muted);width:38px;text-align:left}
+.board td.rk{font-family:var(--f-display);font-weight:900;font-size:22px;color:var(--muted);width:38px;text-align:left;white-space:nowrap}
 .board tr.top td.rk{color:var(--gold)}
 .board td.nm{text-align:left}
 .board td.nm div{display:flex;align-items:center;gap:8px;font-weight:600;min-width:0}
@@ -324,3 +324,4 @@ img{max-width:100%}
 /* last week's winner: gold crown right after their name in each fight's league picks */
 .namelink .crown{margin:0 0 0 4px;vertical-align:-1px}
 .namelink .crown svg{width:16px;height:12px}
+.board td.rk .t{font-size:14px;vertical-align:3px;margin-right:1px}

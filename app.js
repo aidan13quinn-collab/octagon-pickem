@@ -551,19 +551,12 @@ function picksHTML(){
       <span class="ls-v">${L?(L.hit===null?"Pending":L.hit==="push"?"Push":L.hit?"Hit":"Missed"):(locked?"":"Pick a fighter, then lock it")}</span></div>`;
   }
   if(!locked && live.length) h += `<p class="note">${done} of ${live.length} picked. Picks save automatically and lock when the first fight starts.</p>`;
-  if(!fights.length) h += emptyHTML("No bouts on this card","Bouts will appear here once they're announced.");
+  if(!live.length) h += emptyHTML("No bouts on this card","Bouts will appear here once they're announced.");
 
-  fights.forEach((f,i)=>{
+  // cancelled bouts are left off the page (players still get the "fight cancelled" notification)
+  live.forEach((f,i)=>{
     const p = pickOf(S.uid,c.id,f.id);
     const isLock = !!(L && L.f.id===f.id);
-    if(isOff(f)){
-      const myLock = lockRow(S.uid,c.id)?.fight_id===f.id;
-      h += `<section class="bout off" aria-label="${esc(f.red)} vs ${esc(f.blue)}, cancelled">
-        <div class="bout-meta"><span class="label">${esc(f.weight||"Bout")}</span><span class="pill locked">Cancelled</span></div>
-        <div class="offnames"><s>${esc(f.red)}</s> <span class="vs">VS</span> <s>${esc(f.blue)}</s></div>
-        <p class="note" style="margin:0">This bout is off the card. ${p?"Your pick doesn't count either way.":"It doesn't count for anyone."}${myLock?" Your lock on it is void, so you can lock another pick.":""}</p></section>`;
-      return;
-    }
     const flocked = fightLocked(c,f);
     const res = f.res && f.res.w ? f.res : null;
     const tag = i===0 ? "Main event" : (i===1 ? "Co-main" : "");
@@ -664,8 +657,13 @@ function boardHTML(){
   let h = `<div class="event-head"><h2>Season standings</h2><span class="label">${rows.length} ${rows.length===1?"player":"players"}</span></div>`;
   if(!rows.some(r=>r.w+r.l>0)) h += `<p class="note">No results yet. Everyone starts at 0–0.</p>`;
   h += `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
+  // tied players (same record and same lock record) share a place, shown as T-2, T-2, then 4
+  const same = (a,b) => !!a && !!b && a.w===b.w && a.l===b.l && a.lw===b.lw && a.ll===b.ll;
+  let place = 0;
   rows.forEach((r,i)=>{
-    h += `<tr class="${i===0&&r.w>0?"top":""}"><td class="rk">${i+1}</td>
+    if(!same(rows[i-1], r)) place = i+1;
+    const tied = same(rows[i-1], r) || same(rows[i+1], r);
+    h += `<tr class="${place===1&&r.w>0?"top":""}"><td class="rk">${tied?`<span class="t">T-</span>${place}`:place}</td>
       <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${commish(r.id)}${esc(nameOf(r.id))}${crown(r.id)}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id,true)}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
@@ -724,7 +722,7 @@ function playerHTML(uid){
   const cr = cardRecord(uid,c);
   h += `<p class="note">${cr.w+cr.l?`<span class="nw">${cr.w}–${cr.l}</span> on this card. `:""}${L?`Lock: ${esc(L.side==="red"?L.f.red:L.f.blue)}${L.hit===null?"":L.hit==="push"?" (push)":L.hit?" (hit)":" (missed)"}.`:"No lock on this card."}</p>`;
   h += `<div class="plist">`;
-  fights.forEach(f=>{
+  fights.filter(f=>!isOff(f)).forEach(f=>{
     const p = pickOf(uid,c.id,f.id);
     const off = isOff(f);
     const g = grade(p,f,owes(uid,c));
