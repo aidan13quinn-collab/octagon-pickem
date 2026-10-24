@@ -14,6 +14,13 @@ const S = {
   push: { subscribed: false, busy: false }
 };
 try { const t = localStorage.getItem("op-tab"); if (t === "picks" || t === "board") S.tab = t; } catch (e) {}
+// links from notifications: /?tab=picks&card=<card id>
+try {
+  const q = new URLSearchParams(location.search);
+  const t = q.get("tab"); if (t === "picks" || t === "board") S.tab = t;
+  if (q.get("card")) S.cardId = q.get("card");
+  if (q.has("tab") || q.has("card")) history.replaceState(null, "", location.pathname);
+} catch (e) {}
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -385,10 +392,10 @@ async function pushTest(){
   else if(!data.sent) toast("No devices got it. Turn notifications off and on again.");
   else toast("Test sent. It should pop up in a few seconds.");
 }
-const defaultPrefs = () => ({ fight_cancelled:true, fight_added:true, friday_reminder:true });
+const defaultPrefs = () => ({ fight_cancelled:true, fight_added:true, friday_reminder:true, card_results:true });
 async function loadPrefs(){
   if(!S.uid) return;
-  const { data } = await sb.from("notify_prefs").select("fight_cancelled,fight_added,friday_reminder").eq("user_id",S.uid).maybeSingle();
+  const { data } = await sb.from("notify_prefs").select("fight_cancelled,fight_added,friday_reminder,card_results").eq("user_id",S.uid).maybeSingle();
   S.prefs = data || defaultPrefs();
   if(S.page==="settings") render();
 }
@@ -486,13 +493,14 @@ function settingsHTML(){
     h += `<div class="pushstate on"><span class="dot" aria-hidden="true"></span><span>On for this device</span></div>
       <div class="row-btns"><button class="btn ghost sm" data-act="push-test">Send a test</button><button class="btn ghost sm" data-act="push-off" ${S.push.busy?"disabled":""}>Turn off on this device</button></div>`;
   } else {
-    h += `<p class="note" style="margin:0">Get a heads-up on your phone when the card changes and before picks lock.</p>
+    h += `<p class="note" style="margin:0">Get a heads-up on your phone when the card changes, before picks lock, and when the results are in.</p>
       <div><button class="btn gold" data-act="push-on" ${S.push.busy?"disabled":""}>${S.push.busy?"Turning on…":"Turn on notifications"}</button></div>`;
   }
   h += `<div class="toggles">
     ${toggleRow("fight_cancelled","A fight gets cancelled","When a bout on the upcoming card is called off.")}
     ${toggleRow("fight_added","A fight gets added","When a new bout is added to the upcoming card.")}
     ${toggleRow("friday_reminder","Friday reminder","Fridays at 5 PM ET: what time picks lock tomorrow, when the card starts.")}
+    ${toggleRow("card_results","Card results","When the last fight ends: your record and where you placed.")}
   </div>
   <p class="note" style="margin:0">These choices apply to every device where you turn notifications on.</p></div>`;
   return h;
@@ -632,7 +640,7 @@ function crowdHTML(c,f){
   picksForFight(c.id,f.id).forEach(p=>(p.side==="red"?red:blue).push(p.user_id));
   const n = red.length+blue.length;
   if(!n) return locked0(c) ? `<div class="crowd"><span class="note">Nobody picked this one.</span></div>` : "";
-  const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${commish(id)}${esc(nameOf(id))}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
+  const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${commish(id)}${esc(nameOf(id))}${crown(id)}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
   return `<div class="crowd"><span class="label">League picks · <span class="nw">${red.length}–${blue.length}</span></span>
     <div class="bar" aria-hidden="true"><i style="width:${red.length/n*100}%;background:var(--red)"></i><i style="width:${blue.length/n*100}%;background:var(--blue)"></i></div>
     <div class="who"><span style="color:var(--red)">${esc(f.red)}:</span>${red.map(desc).join("")||"<span>none</span>"}</div>

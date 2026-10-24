@@ -321,3 +321,6 @@ img{max-width:100%}
 .namelink .commish svg{width:13px;height:13px}
 /* records (10–3, 28-4-0) never break across lines */
 .nw{white-space:nowrap}
+/* last week's winner: gold crown right after their name in each fight's league picks */
+.namelink .crown{margin:0 0 0 4px;vertical-align:-1px}
+.namelink .crown svg{width:16px;height:12px}
