@@ -687,7 +687,7 @@ function boardHTML(){
     if(!same(rows[i-1], r)) place = i+1;
     const tied = same(rows[i-1], r) || same(rows[i+1], r);
     h += `<tr class="${place===1&&r.w>0?"top":""}"><td class="rk">${tied?`<span class="t">T-</span>${place}`:place}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span>${commish(r.id)}${esc(nameOf(r.id))}${crown(r.id)}${r.id===S.uid?" (you)":""}</span>${lockTag(r.id,true)}</span><span class="chev" aria-hidden="true">›</span></button></td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${crown(r.id)}</span>${lockTag(r.id,true)}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
   h += `</tbody></table></div><p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. A fight you didn't pick counts as a miss. Draws, no contests and cancelled bouts don't count.</p>`;
@@ -721,19 +721,27 @@ function beltCounts(){ return cached("belts", ()=>{
   });
   return out;
 }); }
-// championship belt, standing up: strap, two side plates and a big center plate
-const beltSVG = `<svg viewBox="0 0 16 32" aria-hidden="true"><rect x="4.5" y="0.5" width="7" height="31" rx="2" fill="currentColor" opacity=".55"/><rect x="5.25" y="3.5" width="5.5" height="4.5" rx="1" fill="currentColor"/><rect x="5.25" y="24" width="5.5" height="4.5" rx="1" fill="currentColor"/><ellipse cx="8" cy="16" rx="7.5" ry="7.2" fill="currentColor"/><ellipse cx="8" cy="16" rx="4.9" ry="4.7" fill="none" stroke="var(--belt-ink)" stroke-width="1.1"/><path d="m8 13.3.8 1.7 1.9.2-1.4 1.3.4 1.9-1.7-.9-1.7.9.4-1.9-1.4-1.3 1.9-.2z" fill="var(--belt-ink)"/></svg>`;
+// championship belt: black strap, two side plates and an octagon center plate with a star.
+// The gold/silver shine comes from two gradients defined once on the page (beltDefs).
+function beltSVG(m){ const g = m==="silver" ? "url(#fwBeltS)" : "url(#fwBeltG)";
+  return `<svg viewBox="0 0 64 32" aria-hidden="true"><rect x="1" y="10" width="62" height="12" rx="3" fill="#17181c"/><rect x="8" y="11.5" width="8" height="9" rx="1.5" fill="${g}"/><rect x="48" y="11.5" width="8" height="9" rx="1.5" fill="${g}"/><polygon points="26,2 38,2 46,10 46,22 38,30 26,30 18,22 18,10" fill="${g}" stroke="#17181c" stroke-width="1"/><polygon points="27.5,6 36.5,6 42,11.5 42,20.5 36.5,26 27.5,26 22,20.5 22,11.5" fill="none" stroke="#17181c" stroke-opacity=".5" stroke-width="1.1"/><path d="m32 9.8 1.9 3.9 4.3.6-3.1 3 .7 4.3-3.8-2-3.8 2 .7-4.3-3.1-3 4.3-.6z" fill="#17181c" fill-opacity=".75"/></svg>`; }
+(function beltDefs(){
+  const stop = (o,c) => `<stop offset="${o}" stop-color="${c}"/>`;
+  document.body.insertAdjacentHTML("afterbegin", `<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+    <linearGradient id="fwBeltG" x1="0" y1="0" x2="0" y2="1">${stop(0,"#FFF1B8")+stop(.35,"#F2C14E")+stop(.7,"#C8901E")+stop(1,"#8C5E0E")}</linearGradient>
+    <linearGradient id="fwBeltS" x1="0" y1="0" x2="0" y2="1">${stop(0,"#FFFFFF")+stop(.35,"#DDE2E8")+stop(.7,"#A9B1BC")+stop(1,"#6E7783")}</linearGradient></defs></svg>`);
+})();
 // league commissioner (the person who built and runs Fight Week)
 const COMMISSIONER_ID = "414eba8d-669f-4cbb-8976-abb42c12c228";
 const commishSVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8 3.5 5v6.2c0 5.3 3.6 9.6 8.5 11 4.9-1.4 8.5-5.7 8.5-11V5L12 1.8z" fill="currentColor"/><path d="m12 6.6 1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z" fill="var(--commish-star)"/></svg>`;
 function commish(uid){ return uid===COMMISSIONER_ID ? `<span class="commish" title="League commissioner" role="img" aria-label="Commissioner">${commishSVG}</span>` : ""; }
-// every belt a player has won, slightly overlapped: gold belts first, then silver
+// every belt a player has won: a gold belt (with ×N when more than one), then a silver belt
 function crown(uid){
   const B = beltCounts()[uid]; if(!B) return "";
   const label = [B.g?`${B.g} gold`:"",B.s?`${B.s} silver`:""].filter(Boolean).join(", ");
   const tip = [B.gold.length?`Won ${B.gold.join(", ")}`:"",B.silver.length?`Second at ${B.silver.join(", ")}`:""].filter(Boolean).join(" · ");
-  const one = k => `<span class="crown ${k}">${beltSVG}</span>`;
-  return `<span class="belts" title="${esc(tip)}" role="img" aria-label="${esc(label)} ${B.g+B.s===1?"belt":"belts"}">${one("gold").repeat(B.g)}${one("silver").repeat(B.s)}</span>`;
+  const one = (m,n) => n ? `<span class="belt ${m}">${beltSVG(m)}${n>1?`<span class="bx">×${n}</span>`:""}</span>` : "";
+  return `<span class="belts" title="${esc(tip)}" role="img" aria-label="${esc(label)} ${B.g+B.s===1?"belt":"belts"}">${one("gold",B.g)}${one("silver",B.s)}</span>`;
 }
 function cardRecord(uid, c){
   let w=0,l=0;
