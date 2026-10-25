@@ -118,7 +118,7 @@ async function loadAll(){
     fetchAll(()=>sb.from("profiles").select("id,display_name,created_at").order("id")),
     fetchAll(()=>sb.from("picks").select("user_id,card_id,fight_id,side,updated_at").order("user_id").order("card_id").order("fight_id")),
     fetchAll(()=>sb.from("locks").select("user_id,card_id,fight_id").order("user_id").order("card_id")),
-    fetchAll(()=>sb.from("fighters").select("name,record,recent,country").order("name"))
+    fetchAll(()=>sb.from("fighters").select("name,record,recent,country,photo_url,photo_credit,photo_page").order("name"))
   ]);
   const err = cards.error || profiles.error || picks.error || locks.error;
   if(err){ toast("Couldn't load the league. Pull to refresh."); console.error(err); }
@@ -178,7 +178,7 @@ function applyChange(table, p){
   } else if(table === "profiles"){
     if(del) delete S.profiles[o.id]; else S.profiles[n.id] = { id:n.id, display_name:n.display_name, created_at:n.created_at };
   } else if(table === "fighters"){
-    if(del) delete S.fighters[o.name]; else S.fighters[n.name] = { name:n.name, record:n.record, recent:n.recent, country:n.country };
+    if(del) delete S.fighters[o.name]; else S.fighters[n.name] = { name:n.name, record:n.record, recent:n.recent, country:n.country, photo_url:n.photo_url, photo_credit:n.photo_credit, photo_page:n.photo_page };
   }
   bump(); scheduleRender();
 }
@@ -563,7 +563,7 @@ function picksHTML(){
     h += `<section class="bout${isLock?" is-lock":""}" aria-label="${esc(f.red)} vs ${esc(f.blue)}">
       <div class="bout-meta"><span class="label">${esc(tag?tag+" · ":"")}${esc(f.weight||"Bout")} · ${f.rounds||3} rds</span>
         ${isLock?`<span class="pill gold">Lock of the week</span>`:""}</div>
-      <div class="corners">${fighterBtn(c,f,"red",p,flocked,res)}<span class="vs">VS</span>${fighterBtn(c,f,"blue",p,flocked,res)}</div>`;
+      <div class="corners">${fighterBtn(c,f,"red",p,flocked,res)}<span class="vs">VS</span>${fighterBtn(c,f,"blue",p,flocked,res)}</div>${photoCredits(f)}`;
     if(p && !flocked){
       const nm = p==="red"?f.red:f.blue;
       h += `<div class="chips"><button class="chip lockchip" data-act="lock" data-fight="${esc(f.id)}" aria-pressed="${isLock}">${lockSVG}<span>${isLock?`Locked: ${esc(nm)}`:"Make this my lock"}</span></button>${isLock?'<span class="note">Tap to remove</span>':(L?'<span class="note">Moves your lock here</span>':"")}</div>`;
@@ -588,8 +588,31 @@ function fighterBtn(c,f,side,p,locked,res){
   const odds = side==="red"?f.oddsRed:f.oddsBlue;
   const won = res && res.w===side;
   return `<button class="fighter ${side}${won?" won":""}" data-act="pick" data-fight="${esc(f.id)}" data-v="${side}" aria-pressed="${p===side}" ${locked?"disabled":""}>
-    <span class="cn">${side==="red"?"Red corner":"Blue corner"}${won?" · Winner":""}</span><span class="nm">${side==="red"?flag(name)+esc(name):esc(name)+flag(name)}</span>
+    ${boutHasPhoto(f)?face(name):""}<span class="cn">${side==="red"?"Red corner":"Blue corner"}${won?" · Winner":""}</span><span class="nm">${side==="red"?flag(name)+esc(name):esc(name)+flag(name)}</span>
     <span class="od">${odds!=null?esc(fmtOdds(odds)):"Odds TBA"}</span></button>`;
+}
+// fighter photos: ufc.com fight card photos, or Wikimedia Commons when ufc.com has none
+// (filled in by the fighter-photos job). A bout shows faces when at least one fighter has a photo;
+// a fighter without one gets their initials.
+function boutHasPhoto(f){ return !!(S.fighters[f.red]?.photo_url || S.fighters[f.blue]?.photo_url); }
+function face(name){
+  const u = S.fighters[name]?.photo_url;
+  if(u && /^https:\/\/((www\.)?ufc\.com\/images\/|(upload|thumb)\.wikimedia\.org\/)/.test(u)){
+    const ufc = /ufc\.com/.test(u);
+    return `<span class="face${ufc?" ufc":""}"><img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add('none');this.remove()"></span>`;
+  }
+  const ini = String(name).split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase();
+  return `<span class="face none" aria-hidden="true">${esc(ini)}</span>`;
+}
+// photographer credit + license, required by the photos' Creative Commons licenses
+function photoCredits(f){
+  const items = [f.red,f.blue].map(n=>S.fighters[n]).filter(x=>x && x.photo_url && x.photo_credit);
+  if(!items.length) return "";
+  return `<p class="credits">Photos: ${items.map(x=>{
+    const page = x.photo_page && /^https:\/\/commons\.wikimedia\.org\//.test(x.photo_page) ? x.photo_page : "";
+    const t = `${esc(x.name)}: ${esc(x.photo_credit)}`;
+    return page ? `<a href="${esc(page)}" target="_blank" rel="noopener">${t}</a>` : t;
+  }).join(" · ")} · via Wikimedia Commons</p>`;
 }
 // last-5 UFC results as little W/L chips, newest first
 function formStrip(name){
