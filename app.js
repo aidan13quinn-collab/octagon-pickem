@@ -694,13 +694,9 @@ function boardHTML(){
   return h;
 }
 
-// last week's winner(s): most correct picks on the most recent fully graded card; ties all get the gold belt
+// last week's winner(s): most correct picks on the most recent fully graded card
 function lastWinners(){ return cached("winners", lastWinnersCalc); }
-function lastWinnersCalc(){
-  const done = S.cards.filter(c=>(c.fights||[]).length && c.fights.every(f=>f.res && f.res.w))
-    .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  if(!done.length) return { card:null, ids:new Set() };
-  const c = done[0];
+function cardPodium(c){
   let best = 0; const recs = {};
   players().forEach(id=>{ const r = cardRecord(id,c); recs[id]=r; if(r.w>best) best=r.w; });
   const ids = new Set(best>0 ? Object.keys(recs).filter(id=>recs[id].w===best) : []);
@@ -710,18 +706,34 @@ function lastWinnersCalc(){
   const silver = new Set(second>0 ? Object.keys(recs).filter(id=>recs[id].w===second) : []);
   return { card:c, ids, best, silver, second };
 }
-// championship belt: strap, side plates and a big center plate
-const beltSVG = `<svg viewBox="0 0 32 16" aria-hidden="true"><rect x="0.5" y="4.5" width="31" height="7" rx="2" fill="currentColor" opacity=".55"/><rect x="3.5" y="5.25" width="4.5" height="5.5" rx="1" fill="currentColor"/><rect x="24" y="5.25" width="4.5" height="5.5" rx="1" fill="currentColor"/><ellipse cx="16" cy="8" rx="7.2" ry="7.5" fill="currentColor"/><ellipse cx="16" cy="8" rx="4.7" ry="4.9" fill="none" stroke="var(--belt-ink)" stroke-width="1.1"/><path d="m16 5.3.8 1.7 1.9.2-1.4 1.3.4 1.9-1.7-.9-1.7.9.4-1.9-1.4-1.3 1.9-.2z" fill="var(--belt-ink)"/></svg>`;
+function gradedCards(){ return S.cards.filter(c=>(c.fights||[]).length && c.fights.every(f=>f.res && f.res.w)).sort((a,b)=>String(b.date).localeCompare(String(a.date))); }
+function lastWinnersCalc(){
+  const done = gradedCards();
+  return done.length ? cardPodium(done[0]) : { card:null, ids:new Set(), silver:new Set() };
+}
+// every belt each player has won: gold for winning a card, silver for second (ties share)
+function beltCounts(){ return cached("belts", ()=>{
+  const out = {};
+  gradedCards().forEach(c=>{
+    const P = cardPodium(c);
+    P.ids.forEach(id=>{ (out[id] ||= {g:0,s:0,gold:[],silver:[]}).g++; out[id].gold.push(c.name); });
+    P.silver.forEach(id=>{ (out[id] ||= {g:0,s:0,gold:[],silver:[]}).s++; out[id].silver.push(c.name); });
+  });
+  return out;
+}); }
+// championship belt, standing up: strap, two side plates and a big center plate
+const beltSVG = `<svg viewBox="0 0 16 32" aria-hidden="true"><rect x="4.5" y="0.5" width="7" height="31" rx="2" fill="currentColor" opacity=".55"/><rect x="5.25" y="3.5" width="5.5" height="4.5" rx="1" fill="currentColor"/><rect x="5.25" y="24" width="5.5" height="4.5" rx="1" fill="currentColor"/><ellipse cx="8" cy="16" rx="7.5" ry="7.2" fill="currentColor"/><ellipse cx="8" cy="16" rx="4.9" ry="4.7" fill="none" stroke="var(--belt-ink)" stroke-width="1.1"/><path d="m8 13.3.8 1.7 1.9.2-1.4 1.3.4 1.9-1.7-.9-1.7.9.4-1.9-1.4-1.3 1.9-.2z" fill="var(--belt-ink)"/></svg>`;
 // league commissioner (the person who built and runs Fight Week)
 const COMMISSIONER_ID = "414eba8d-669f-4cbb-8976-abb42c12c228";
 const commishSVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8 3.5 5v6.2c0 5.3 3.6 9.6 8.5 11 4.9-1.4 8.5-5.7 8.5-11V5L12 1.8z" fill="currentColor"/><path d="m12 6.6 1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z" fill="var(--commish-star)"/></svg>`;
 function commish(uid){ return uid===COMMISSIONER_ID ? `<span class="commish" title="League commissioner" role="img" aria-label="Commissioner">${commishSVG}</span>` : ""; }
-// gold belt for last week's winner(s), silver belt for second place
+// every belt a player has won, slightly overlapped: gold belts first, then silver
 function crown(uid){
-  const W = lastWinners();
-  if(W.ids.has(uid)) return `<span class="crown gold" title="Won ${esc(W.card.name)}" role="img" aria-label="Gold belt: won ${esc(W.card.name)}">${beltSVG}</span>`;
-  if(W.silver && W.silver.has(uid)) return `<span class="crown silver" title="Second at ${esc(W.card.name)}" role="img" aria-label="Silver belt: second at ${esc(W.card.name)}">${beltSVG}</span>`;
-  return "";
+  const B = beltCounts()[uid]; if(!B) return "";
+  const label = [B.g?`${B.g} gold`:"",B.s?`${B.s} silver`:""].filter(Boolean).join(", ");
+  const tip = [B.gold.length?`Won ${B.gold.join(", ")}`:"",B.silver.length?`Second at ${B.silver.join(", ")}`:""].filter(Boolean).join(" · ");
+  const one = k => `<span class="crown ${k}">${beltSVG}</span>`;
+  return `<span class="belts" title="${esc(tip)}" role="img" aria-label="${esc(label)} ${B.g+B.s===1?"belt":"belts"}">${one("gold").repeat(B.g)}${one("silver").repeat(B.s)}</span>`;
 }
 function cardRecord(uid, c){
   let w=0,l=0;

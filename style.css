@@ -335,9 +335,14 @@ img{max-width:100%}
 @media (max-width:420px){.fighter .face{width:48px;height:48px;font-size:16px}}
 /* ufc.com card photos are tall upper-body cutouts: zoom in on the head */
 .fighter .face.ufc img{object-position:50% 0;transform:scale(1.35);transform-origin:50% 8%}
-/* belts for last week's top two: gold title belt for the winner(s), silver for second */
-.crown{--belt-ink:var(--surface)}
-.crown.silver{color:var(--silver);filter:drop-shadow(0 1px 0 color-mix(in srgb,var(--silver) 35%,transparent))}
-.crown svg{width:30px;height:15px}
-.namelink .crown svg{width:24px;height:12px}
-.pmeta h2 .crown svg{width:36px;height:18px}
+/* belts: gold title belt for each card won, silver for each second place; several overlap a little */
+.belts{display:inline-flex;align-items:center;margin-left:6px;vertical-align:middle;line-height:0}
+.belts .crown{--belt-ink:var(--surface);margin:0;filter:drop-shadow(1px 0 0 var(--surface)) drop-shadow(0 1px 0 color-mix(in srgb,currentColor 35%,transparent))}
+.belts .crown + .crown{margin-left:-3px}
+.belts .crown.silver{color:var(--silver)}
+.belts .crown svg{width:15px;height:30px}
+.namelink .belts{margin-left:4px}
+.namelink .belts .crown svg{width:11px;height:22px}
+.namelink .belts .crown + .crown{margin-left:-2px}
+.pmeta h2 .belts .crown svg{width:18px;height:36px}
+.pmeta h2 .belts .crown + .crown{margin-left:-4px}
