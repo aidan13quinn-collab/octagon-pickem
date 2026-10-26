@@ -191,7 +191,7 @@ function subscribe(){
 }
 function unsubscribe(){ if(channel){ sb.removeChannel(channel); channel=null; } }
 
-const LOCK_LIMIT = -200, LOCK_MSG = "Locks have to be -200 or better.";
+const LOCK_LIMIT = -250, LOCK_MSG = "Locks have to be -250 or better.";
 function lockOK(f, side){ if(!side) return true; const o = side==="red" ? f.oddsRed : f.oddsBlue; return o==null || Number(o) >= LOCK_LIMIT; }
 async function setPick(c, f, side){
   const prev = pickOf(S.uid, c.id, f.id);
@@ -201,7 +201,7 @@ async function setPick(c, f, side){
   putPick({user_id:S.uid, card_id:c.id, fight_id:f.id, side}); bump();
   render();
   const { error } = await sb.from("picks").upsert({user_id:S.uid, card_id:c.id, fight_id:f.id, side, updated_at:new Date().toISOString()});
-  if(error){ toast(/-200/.test(error.message||"") ? LOCK_MSG : cardLocked(c) ? "Picks are locked for this card." : "Couldn't save that pick. Try again."); loadAll(); }
+  if(error){ toast(/Locks have to be/.test(error.message||"") ? LOCK_MSG : cardLocked(c) ? "Picks are locked for this card." : "Couldn't save that pick. Try again."); loadAll(); }
 }
 async function toggleLock(c, f){
   const cur = lockRow(S.uid, c.id);
@@ -214,7 +214,7 @@ async function toggleLock(c, f){
   if(!lockOK(f, pickOf(S.uid, c.id, f.id))){ toast(LOCK_MSG); return; }
   putLock({user_id:S.uid, card_id:c.id, fight_id:f.id}); bump(); render();
   const { error } = await sb.from("locks").upsert({user_id:S.uid, card_id:c.id, fight_id:f.id, updated_at:new Date().toISOString()});
-  if(error){ toast(/-200/.test(error.message||"") ? LOCK_MSG : cardLocked(c) ? "Locks are closed for this card." : "Couldn't save your lock. Try again."); loadAll(); }
+  if(error){ toast(/Locks have to be/.test(error.message||"") ? LOCK_MSG : cardLocked(c) ? "Locks are closed for this card." : "Couldn't save your lock. Try again."); loadAll(); }
 }
 
 /* ---------- render ---------- */
