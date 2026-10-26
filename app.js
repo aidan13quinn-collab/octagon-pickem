@@ -684,7 +684,7 @@ function weekStandings(c){ return cached("week:"+c.id, ()=>{
   return rows;
 }); }
 // the table both views share; tied players (same record and same lock record) share a place: T-2, T-2, then 4
-function boardTable(rows){
+function boardTable(rows, showLock){
   let h = `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
   const same = (a,b) => !!a && !!b && a.w===b.w && a.l===b.l && a.lw===b.lw && a.ll===b.ll;
   let place = 0;
@@ -692,7 +692,7 @@ function boardTable(rows){
     if(!same(rows[i-1], r)) place = i+1;
     const tied = same(rows[i-1], r) || same(rows[i+1], r);
     h += `<tr class="${place===1&&r.w>0?"top":""}"><td class="rk">${tied?`<span class="t">T-</span>${place}`:place}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${crown(r.id)}</span>${lockTag(r.id,true)}</span><span class="chev" aria-hidden="true">›</span></button></td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${crown(r.id)}</span>${showLock?lockTag(r.id,true):""}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
   return h + `</tbody></table></div>`;
@@ -702,7 +702,7 @@ function boardHTML(){
   const view = S.boardView==="week" ? "week" : "all";
   let h = `<div class="seg boardseg" role="group" aria-label="Standings view">
     <button data-act="bview" data-v="all" aria-pressed="${view==="all"}">All time</button>
-    <button data-act="bview" data-v="week" aria-pressed="${view==="week"}">Week by week</button></div>`;
+    <button data-act="bview" data-v="week" aria-pressed="${view==="week"}">Fight week</button></div>`;
   const cc = currentCard();
   if(view==="week"){
     if(!cc) return h + emptyHTML("No fight card yet","The next UFC card is added automatically. Check back soon.");
@@ -711,7 +711,7 @@ function boardHTML(){
     h += `<div class="cardpick"><div class="event-head"><h2>${esc(cc.name)}</h2>${cc.date?`<span class="label">${esc(fmtDate(cc.date))}</span>`:""}${rows.length?`<span class="label">${rows.length} ${rows.length===1?"player":"players"}</span>`:""}</div>${cardSelect()}</div>`;
     if(!rows.length) return h + emptyHTML("No picks on this card yet","Rankings for this card show up once people make their picks.");
     if(!graded) h += `<p class="note">No results yet. Rankings fill in as the fights finish.</p>`;
-    h += boardTable(rows);
+    h += boardTable(rows, true);
     h += `<p class="note">Rankings for this card only. Tap a name to see their picks. Ties go to fewer misses, then the lock.</p>`;
     return h;
   }
@@ -720,7 +720,7 @@ function boardHTML(){
   h += `<div class="event-head"><h2>All-time standings</h2><span class="label">${rows.length} ${rows.length===1?"player":"players"}</span></div>`;
   if(!rows.some(r=>r.w+r.l>0)) h += `<p class="note">No results yet. Everyone starts at 0–0.</p>`;
   h += boardTable(rows);
-  h += `<p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. A fight you didn't pick counts as a miss. Draws, no contests and cancelled bouts don't count.</p>`;
+  h += `<p class="note">Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. A fight you didn't pick counts as a miss. Draws, no contests and cancelled bouts don't count.</p>`;
   return h;
 }
 
