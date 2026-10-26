@@ -349,3 +349,5 @@ img{max-width:100%}
 .namelink .belt .bx{font-size:11px}
 .pmeta h2 .belt svg{width:48px;height:24px}
 .pmeta h2 .belt .bx{font-size:16px}
+/* standings: All time / Week by week switch */
+.boardseg button{padding:8px 10px;font-size:14px}

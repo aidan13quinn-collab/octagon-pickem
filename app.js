@@ -14,6 +14,7 @@ const S = {
   push: { subscribed: false, busy: false }
 };
 try { const t = localStorage.getItem("op-tab"); if (t === "picks" || t === "board") S.tab = t; } catch (e) {}
+try { const v = localStorage.getItem("op-board"); if (v === "all" || v === "week") S.boardView = v; } catch (e) {}
 // links from notifications: /?tab=picks&card=<card id>
 try {
   const q = new URLSearchParams(location.search);
@@ -448,7 +449,7 @@ function accountHTML(){
   const email = S.session?.user?.email || "";
   const joined = S.session?.user?.created_at ? new Date(S.session.user.created_at).toLocaleDateString(undefined,{month:"long",year:"numeric"}) : "";
   return `
-  <div class="phead">${avatar(S.uid)}<div class="pmeta"><h2>${commish(S.uid)}${esc(nameOf(S.uid))}</h2>${joined?`<div class="note">In the league since ${esc(joined)}</div>`:""}</div></div>
+  <div class="phead">${avatar(S.uid)}<div class="pmeta"><h2>${commish(S.uid)}${esc(nameOf(S.uid))}${crown(S.uid)}</h2>${joined?`<div class="note">In the league since ${esc(joined)}</div>`:""}</div></div>
   <form class="panel" id="name-form" autocomplete="off" novalidate>
     <h3>Username</h3>
     <p class="note" style="margin:0">This is the name everyone sees on the standings and picks.</p>
@@ -672,15 +673,19 @@ function lockTag(uid, short){
   const st = L.hit===null ? "" : L.hit==="push" ? " · push" : L.hit ? " · hit" : " · missed";
   return `<span class="locktag ${L.hit===true?"hit":L.hit===false?"miss":""}">${lockSVG}<span>${esc(nm)}${st}</span></span>`;
 }
-function boardHTML(){
-  if(S.viewUser) return playerHTML(S.viewUser);
-  const rows = standings();
-  if(!rows.length) return emptyHTML("No one's on the board yet","Make a pick to join. Standings fill in as results come in.");
-  const cc = currentCard();
-  let h = `<div class="event-head"><h2>Season standings</h2><span class="label">${rows.length} ${rows.length===1?"player":"players"}</span></div>`;
-  if(!rows.some(r=>r.w+r.l>0)) h += `<p class="note">No results yet. Everyone starts at 0–0.</p>`;
-  h += `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
-  // tied players (same record and same lock record) share a place, shown as T-2, T-2, then 4
+// standings rows for one card: that card's picks and lock only
+function weekStandings(c){ return cached("week:"+c.id, ()=>{
+  const ids = new Set(players());
+  const rows = [...ids].map(id=>{
+    const r = cardRecord(id,c); const L = lockInfo(id,c);
+    return { id, w:r.w, l:r.l, lw:L&&L.hit===true?1:0, ll:L&&L.hit===false?1:0, picked:(c.fights||[]).some(f=>pickOf(id,c.id,f.id)) };
+  }).filter(r=>r.w+r.l>0 || r.picked);
+  rows.sort((a,b)=>b.w-a.w || a.l-b.l || b.lw-a.lw || a.ll-b.ll || nameOf(a.id).localeCompare(nameOf(b.id)));
+  return rows;
+}); }
+// the table both views share; tied players (same record and same lock record) share a place: T-2, T-2, then 4
+function boardTable(rows){
+  let h = `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
   const same = (a,b) => !!a && !!b && a.w===b.w && a.l===b.l && a.lw===b.lw && a.ll===b.ll;
   let place = 0;
   rows.forEach((r,i)=>{
@@ -690,7 +695,32 @@ function boardHTML(){
       <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${crown(r.id)}</span>${lockTag(r.id,true)}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
-  h += `</tbody></table></div><p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. A fight you didn't pick counts as a miss. Draws, no contests and cancelled bouts don't count.</p>`;
+  return h + `</tbody></table></div>`;
+}
+function boardHTML(){
+  if(S.viewUser) return playerHTML(S.viewUser);
+  const view = S.boardView==="week" ? "week" : "all";
+  let h = `<div class="seg boardseg" role="group" aria-label="Standings view">
+    <button data-act="bview" data-v="all" aria-pressed="${view==="all"}">All time</button>
+    <button data-act="bview" data-v="week" aria-pressed="${view==="week"}">Week by week</button></div>`;
+  const cc = currentCard();
+  if(view==="week"){
+    if(!cc) return h + emptyHTML("No fight card yet","The next UFC card is added automatically. Check back soon.");
+    const rows = weekStandings(cc);
+    const graded = (cc.fights||[]).some(f=>f.res && f.res.w && f.res.w!=="cancelled");
+    h += `<div class="cardpick"><div class="event-head"><h2>${esc(cc.name)}</h2>${cc.date?`<span class="label">${esc(fmtDate(cc.date))}</span>`:""}${rows.length?`<span class="label">${rows.length} ${rows.length===1?"player":"players"}</span>`:""}</div>${cardSelect()}</div>`;
+    if(!rows.length) return h + emptyHTML("No picks on this card yet","Rankings for this card show up once people make their picks.");
+    if(!graded) h += `<p class="note">No results yet. Rankings fill in as the fights finish.</p>`;
+    h += boardTable(rows);
+    h += `<p class="note">Rankings for this card only. Tap a name to see their picks. Ties go to fewer misses, then the lock.</p>`;
+    return h;
+  }
+  const rows = standings();
+  if(!rows.length) return h + emptyHTML("No one's on the board yet","Make a pick to join. Standings fill in as results come in.");
+  h += `<div class="event-head"><h2>All-time standings</h2><span class="label">${rows.length} ${rows.length===1?"player":"players"}</span></div>`;
+  if(!rows.some(r=>r.w+r.l>0)) h += `<p class="note">No results yet. Everyone starts at 0–0.</p>`;
+  h += boardTable(rows);
+  h += `<p class="note">${cc?`Locks shown are for ${esc(cc.name)}. `:""}Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. A fight you didn't pick counts as a miss. Draws, no contests and cancelled bouts don't count.</p>`;
   return h;
 }
 
@@ -816,6 +846,7 @@ $("#app").addEventListener("click", e=>{
   if(act==="page"){ openPage(b.dataset.v); return; }
   if(act==="closepage"){ S.page=null; render(); window.scrollTo(0,0); return; }
   if(act==="theme"){ setTheme(b.dataset.v); return; }
+  if(act==="bview"){ S.boardView=b.dataset.v; try{ localStorage.setItem("op-board",S.boardView); }catch(err){} render(); return; }
   if(act==="push-on"){ pushOn(); return; }
   if(act==="push-off"){ pushOff(); return; }
   if(act==="push-test"){ pushTest(); return; }
