@@ -716,9 +716,9 @@ function boardTable(rows, showLock, allTime){
     const tied = same(rows[i-1], r) || same(rows[i+1], r);
     const rk = unranked ? "–" : tied ? `<span class="t">T-</span>${place}` : place;
     const sub = allTime ? `<span class="pct">${fmtPct(r)}</span>` : "";
-    const under = allTime ? `<span class="cardsplayed">${r.cards} ${r.cards===1?"card":"cards"}</span>` : showLock ? lockTag(r.id,true) : "";
+    const under = allTime ? `<span class="cardsplayed">${r.cards} ${r.cards===1?"card":"cards"}${crown(r.id)}</span>` : showLock ? lockTag(r.id,true) : "";
     h += `<tr class="${!unranked&&place===1&&r.w>0?"top":""}${unranked?" unranked":""}"><td class="rk">${rk}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${crown(r.id)}</span>${under}</span><span class="chev" aria-hidden="true">›</span></button></td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${allTime?"":crown(r.id)}</span>${under}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}${sub}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
   return h + `</tbody></table></div>`;
@@ -773,20 +773,34 @@ function lastWinnersCalc(){
   const done = gradedCards();
   return done.length ? cardPodium(done[0]) : { card:null, ids:new Set(), silver:new Set() };
 }
-// every belt each player has won: gold for winning a card, silver for second (ties share)
+// numbered cards ("UFC 333: ...") return their number; Fight Nights and anything else return null
+function cardNumber(c){ const m = /^UFC\s+(\d+)\b/i.exec(String(c?.name||"").trim()); return m ? m[1] : null; }
+// every belt each player has won: gold for winning a card, silver for second (ties share).
+// num: numbered-card belts, each one its own ({m, num, name}); fn: Fight Night belts, counted
 function beltCounts(){ return cached("belts", ()=>{
   const out = {};
+  const add = (id, m, c) => {
+    const B = (out[id] ||= {g:0,s:0,gold:[],silver:[],num:[],fn:{gold:0,silver:0}});
+    B[m==="gold"?"g":"s"]++; B[m].push(c.name);
+    const n = cardNumber(c);
+    if(n) B.num.push({m, num:n, name:c.name}); else B.fn[m]++;
+  };
   gradedCards().forEach(c=>{
     const P = cardPodium(c);
-    P.ids.forEach(id=>{ (out[id] ||= {g:0,s:0,gold:[],silver:[]}).g++; out[id].gold.push(c.name); });
-    P.silver.forEach(id=>{ (out[id] ||= {g:0,s:0,gold:[],silver:[]}).s++; out[id].silver.push(c.name); });
+    P.ids.forEach(id=>add(id,"gold",c));
+    P.silver.forEach(id=>add(id,"silver",c));
   });
+  // numbered belts: gold first, then silver; newest card first within each
+  Object.values(out).forEach(B=>B.num.sort((a,b)=>(a.m===b.m?0:a.m==="gold"?-1:1) || Number(b.num)-Number(a.num)));
   return out;
 }); }
-// championship belt: black strap, two side plates and an octagon center plate with a star.
+// championship belt: strap, two side plates and an octagon center plate engraved with the card number
+// (red strap) or FN for a Fight Night (black strap).
 // The gold/silver shine comes from two gradients defined once on the page (beltDefs).
-function beltSVG(m){ const g = m==="silver" ? "url(#fwBeltS)" : "url(#fwBeltG)";
-  return `<svg viewBox="0 0 64 32" aria-hidden="true"><rect x="1" y="10" width="62" height="12" rx="3" fill="#17181c"/><rect x="8" y="11.5" width="8" height="9" rx="1.5" fill="${g}"/><rect x="48" y="11.5" width="8" height="9" rx="1.5" fill="${g}"/><polygon points="26,2 38,2 46,10 46,22 38,30 26,30 18,22 18,10" fill="${g}" stroke="#17181c" stroke-width="1"/><polygon points="27.5,6 36.5,6 42,11.5 42,20.5 36.5,26 27.5,26 22,20.5 22,11.5" fill="none" stroke="#17181c" stroke-opacity=".5" stroke-width="1.1"/><path d="m32 9.8 1.9 3.9 4.3.6-3.1 3 .7 4.3-3.8-2-3.8 2 .7-4.3-3.1-3 4.3-.6z" fill="#17181c" fill-opacity=".75"/></svg>`; }
+function beltSVG(m, txt){ const g = m==="silver" ? "url(#fwBeltS)" : "url(#fwBeltG)";
+  const num = txt && txt!=="FN", strap = num ? "#7E1420" : "#17181c", label = txt || "FN";
+  const fs = label.length>=3 ? 10.5 : 11.5;
+  return `<svg viewBox="0 0 64 32" aria-hidden="true"><rect x="1" y="10" width="62" height="12" rx="3" fill="${strap}"/><rect x="7" y="11.5" width="8" height="9" rx="1.5" fill="${g}"/><rect x="49" y="11.5" width="8" height="9" rx="1.5" fill="${g}"/><polygon points="25,1 39,1 48,10 48,22 39,31 25,31 16,22 16,10" fill="${g}" stroke="#17181c" stroke-width="1"/><polygon points="26.5,5 37.5,5 44,11.5 44,20.5 37.5,27 26.5,27 20,20.5 20,11.5" fill="none" stroke="#17181c" stroke-opacity=".45" stroke-width="1"/><text x="32" y="16.2" text-anchor="middle" dominant-baseline="central" font-family="Arial Black, Arial, Helvetica, sans-serif" font-weight="900" font-size="${fs}" fill="#17181c" fill-opacity=".85" letter-spacing="-.5">${esc(label)}</text></svg>`; }
 (function beltDefs(){
   const stop = (o,c) => `<stop offset="${o}" stop-color="${c}"/>`;
   document.body.insertAdjacentHTML("afterbegin", `<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
@@ -797,13 +811,15 @@ function beltSVG(m){ const g = m==="silver" ? "url(#fwBeltS)" : "url(#fwBeltG)";
 const COMMISSIONER_ID = "414eba8d-669f-4cbb-8976-abb42c12c228";
 const commishSVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8 3.5 5v6.2c0 5.3 3.6 9.6 8.5 11 4.9-1.4 8.5-5.7 8.5-11V5L12 1.8z" fill="currentColor"/><path d="m12 6.6 1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z" fill="var(--commish-star)"/></svg>`;
 function commish(uid){ return uid===COMMISSIONER_ID ? `<span class="commish" title="League commissioner" role="img" aria-label="Commissioner">${commishSVG}</span>` : ""; }
-// every belt a player has won: a gold belt (with ×N when more than one), then a silver belt
+// every belt a player has won: numbered-card belts first, each its own (gold, then silver),
+// then Fight Night belts: one gold and one silver, with ×N when more than one
 function crown(uid){
   const B = beltCounts()[uid]; if(!B) return "";
   const label = [B.g?`${B.g} gold`:"",B.s?`${B.s} silver`:""].filter(Boolean).join(", ");
   const tip = [B.gold.length?`Won ${B.gold.join(", ")}`:"",B.silver.length?`Second at ${B.silver.join(", ")}`:""].filter(Boolean).join(" · ");
-  const one = (m,n) => n ? `<span class="belt ${m}">${beltSVG(m)}${n>1?`<span class="bx">×${n}</span>`:""}</span>` : "";
-  return `<span class="belts" title="${esc(tip)}" role="img" aria-label="${esc(label)} ${B.g+B.s===1?"belt":"belts"}">${one("gold",B.g)}${one("silver",B.s)}</span>`;
+  const nums = B.num.map(x=>`<span class="belt ${x.m} num">${beltSVG(x.m, x.num)}</span>`).join("");
+  const fn = (m,n) => n ? `<span class="belt ${m}">${beltSVG(m,"FN")}${n>1?`<span class="bx">×${n}</span>`:""}</span>` : "";
+  return `<span class="belts" title="${esc(tip)}" role="img" aria-label="${esc(label)} ${B.g+B.s===1?"belt":"belts"}">${nums}${fn("gold",B.fn.gold)}${fn("silver",B.fn.silver)}</span>`;
 }
 function cardRecord(uid, c){
   let w=0,l=0;

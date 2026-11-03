@@ -364,3 +364,9 @@ img{max-width:100%}
 .ppill.ok{border-style:solid;border-color:var(--gold);background:var(--gold-soft);color:var(--ink)}
 .ppill.lockp.ok{color:var(--gold)}
 .ptip{flex-basis:100%;font-size:14px;color:var(--muted)}
+/* numbered-card belts: red strap and a soft glow */
+.belt.num svg{filter:drop-shadow(0 0 3px rgba(242,193,78,.65)) drop-shadow(0 1px 1px rgba(0,0,0,.25))}
+.belt.num.silver svg{filter:drop-shadow(0 0 3px rgba(200,210,225,.75)) drop-shadow(0 1px 1px rgba(0,0,0,.25))}
+.board td.nm .cardsplayed{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+.board td.nm .cardsplayed .belts{margin-left:8px;gap:5px}
+.board td.nm .cardsplayed .belt svg{width:40px;height:20px}
