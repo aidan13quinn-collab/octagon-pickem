@@ -82,6 +82,13 @@ function lockInfo(uid, c){
 
 // players who have made at least one pick, on any card
 function pickedEver(uid){ return cached("pickers", ()=>{ const s = new Set(); for(const p of S.pickMap.values()) s.add(p.user_id); return s; }).has(uid); }
+// no lock on a card you played counts as a missed lock, once the card has results.
+// Not if your lock was on a bout that got cancelled.
+function lockMissed(uid, c){
+  if(lockInfo(uid,c) || !played(uid,c) || !scoredCards().includes(c)) return false;
+  const l = lockRow(uid, c.id); const f = l && (c.fights||[]).find(x=>x.id===l.fight_id);
+  return !(f && isOff(f));
+}
 function players(){ return cached("players", ()=>{
   const ids = new Set(Object.keys(S.profiles));
   for(const p of S.pickMap.values()) ids.add(p.user_id);
@@ -97,7 +104,7 @@ function standings(){ return cached("standings", ()=>{
         if(g===1) w++; else if(g===0) l++;
       }
       const L = lockInfo(id,c);
-      if(L && L.hit===true) lw++; else if(L && L.hit===false) ll++;
+      if(L && L.hit===true) lw++; else if((L && L.hit===false) || lockMissed(id,c)) ll++;
     }
     return {id,w,l,lw,ll,cards};
   }).filter(r=>pickedEver(r.id));
@@ -562,13 +569,13 @@ function picksHTML(){
     // progress pills: fights picked and this week's lock, with a one-line reminder until both are done
     const allIn = done===live.length;
     const nm = L ? String(L.side==="red"?L.f.red:L.f.blue).trim().split(/\s+/).pop() : "";
-    const tip = !L ? "Lock your surest pick. Any missed picks count as wrong." : !allIn ? "Any missed picks count as wrong." : "";
+    const tip = !L ? "Lock your surest pick. Any missed picks or locks count as wrong." : !allIn ? "Any missed picks count as wrong." : "";
     h += `<div class="progress"><span class="ppill ${allIn?"ok":""}">${allIn?"✓ ":""}${done}/${live.length} picked</span><span class="ppill lockp ${L?"ok":""}">${lockSVG}${L?`Lock: ${esc(nm)}`:"Lock not set"}</span>${tip?`<span class="ptip">${tip}</span>`:""}</div>`;
   } else if(fights.length){
     const nm = L ? (L.side==="red"?L.f.red:L.f.blue) : "";
     h += `<div class="lockstrip ${L?"set":""}"><span class="lockicon" aria-hidden="true">${lockSVG}</span>
       <span class="ls-t">${L?`Lock: ${esc(nm)}`:(locked?"No lock this week":"Lock of the week")}</span>
-      <span class="ls-v">${L?(L.hit===null?"Pending":L.hit==="push"?"Push":L.hit?"Hit":"Missed"):(locked?"":"Pick a fighter, then lock it")}</span></div>`;
+      <span class="ls-v">${L?(L.hit===null?"Pending":L.hit==="push"?"Push":L.hit?"Hit":"Missed"):lockMissed(S.uid,c)?"Missed":(locked?"":"Pick a fighter, then lock it")}</span></div>`;
   }
   if(!live.length) h += emptyHTML("No bouts on this card","Bouts will appear here once they're announced.");
 
@@ -599,7 +606,7 @@ function picksHTML(){
     h += crowdHTML(c,f);
     h += `</section>`;
   });
-  h += `<div class="panel"><h3>How it works</h3><p class="note" style="margin:0">Pick a winner in every fight to build your record. Then mark one of your picks as your lock of the week; locks keep their own record. Draws, no contests and cancelled bouts don't count either way. Everyone can see each other's picks and locks anytime. Picks lock when the first fight starts.</p></div>`;
+  h += `<div class="panel"><h3>How it works</h3><p class="note" style="margin:0">Pick a winner in every fight to build your record. Then mark one of your picks as your lock of the week; locks keep their own record, and no lock counts as a missed lock. Draws, no contests and cancelled bouts don't count either way. Everyone can see each other's picks and locks anytime. Picks lock when the first fight starts.</p></div>`;
   return h;
 }
 function fighterBtn(c,f,side,p,locked,res){
@@ -685,7 +692,8 @@ function crowdHTML(c,f){
 // this week's lock for a player, shown under their name
 function lockTag(uid, short){
   const c = currentCard(); if(!c) return "";
-  const L = lockInfo(uid,c); if(!L) return "";
+  const L = lockInfo(uid,c);
+  if(!L) return lockMissed(uid,c) ? `<span class="locktag miss">${lockSVG}<span>No lock · missed</span></span>` : "";
   let nm = L.side==="red"?L.f.red:L.f.blue;
   if(short) nm = String(nm).trim().split(/\s+/).pop(); // standings: last name only so it fits on one line
   const st = L.hit===null ? "" : L.hit==="push" ? " · push" : L.hit ? " · hit" : " · missed";
@@ -696,7 +704,7 @@ function weekStandings(c){ return cached("week:"+c.id, ()=>{
   const ids = new Set(players());
   const rows = [...ids].map(id=>{
     const r = cardRecord(id,c); const L = lockInfo(id,c);
-    return { id, w:r.w, l:r.l, lw:L&&L.hit===true?1:0, ll:L&&L.hit===false?1:0, picked:(c.fights||[]).some(f=>pickOf(id,c.id,f.id)) };
+    return { id, w:r.w, l:r.l, lw:L&&L.hit===true?1:0, ll:(L&&L.hit===false)||lockMissed(id,c)?1:0, picked:(c.fights||[]).some(f=>pickOf(id,c.id,f.id)) };
   }).filter(r=>r.w+r.l>0 || r.picked);
   rows.sort((a,b)=>b.w-a.w || a.l-b.l || b.lw-a.lw || a.ll-b.ll || nameOf(a.id).localeCompare(nameOf(b.id)));
   return rows;
@@ -840,7 +848,7 @@ function playerHTML(uid){
   if(past.length){
     h += `<div class="cardhist">${past.map(x=>{
       const cr = cardRecord(uid,x), L = lockInfo(uid,x);
-      const lk = L ? (L.hit===null?"lock pending":L.hit==="push"?"lock push":L.hit?"lock hit":"lock missed") : "no lock";
+      const lk = L ? (L.hit===null?"lock pending":L.hit==="push"?"lock push":L.hit?"lock hit":"lock missed") : lockMissed(uid,x) ? "no lock · missed" : "no lock";
       const rec = played(uid,x) ? `<span class="nw">${cr.w}–${cr.l}</span> · ${lk}` : "didn't play";
       return `<button class="ch ${x.id===c.id?"on":""}" data-act="pcard" data-card="${esc(x.id)}"><span class="ch-n">${esc(x.name)}</span><span class="ch-r">${rec}</span></button>`;
     }).join("")}</div>`;
