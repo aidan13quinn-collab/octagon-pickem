@@ -570,7 +570,7 @@ function picksHTML(){
     const allIn = done===live.length;
     const nm = L ? String(L.side==="red"?L.f.red:L.f.blue).trim().split(/\s+/).pop() : "";
     const tip = !L ? "Lock your surest pick. Any missed picks or locks count as wrong." : !allIn ? "Any missed picks count as wrong." : "";
-    h += `<div class="progress"><span class="ppill ${allIn?"ok":""}">${allIn?"✓ ":""}${done}/${live.length} picked</span><span class="ppill lockp ${L?"ok":""}">${lockSVG}${L?`Lock: ${esc(nm)}`:"Lock not set"}</span>${done?`<button class="sharebtn" data-act="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>Share</button>`:""}${tip?`<span class="ptip">${tip}</span>`:""}</div>`;
+    h += `<div class="progress"><span class="ppill ${allIn?"ok":""}">${allIn?"✓ ":""}${done}/${live.length} picked</span><span class="ppill lockp ${L?"ok":""}">${lockSVG}${L?`Lock: ${esc(nm)}`:"Lock not set"}</span>${done?`<button class="sharebtn" data-act="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>Share picks</button>`:""}${tip?`<span class="ptip">${tip}</span>`:""}</div>`;
   } else if(fights.length){
     const nm = L ? (L.side==="red"?L.f.red:L.f.blue) : "";
     h += `<div class="lockstrip ${L?"set":""}"><span class="lockicon" aria-hidden="true">${lockSVG}</span>
