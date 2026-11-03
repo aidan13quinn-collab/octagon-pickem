@@ -370,3 +370,5 @@ img{max-width:100%}
 .board td.nm .cardsplayed{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
 .board td.nm .cardsplayed .belts{margin-left:8px;gap:5px}
 .board td.nm .cardsplayed .belt svg{width:40px;height:20px}
+/* reigning champ: name in glowing gold */
+.champ{color:var(--gold);text-shadow:0 0 10px rgba(224,177,84,.55),0 0 2px rgba(224,177,84,.35)}

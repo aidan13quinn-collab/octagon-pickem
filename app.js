@@ -252,7 +252,7 @@ function render(){
   $("#me").hidden = !signedIn; $("#tabs").hidden = !signedIn;
   if(signedIn){
     $("#me").innerHTML = `<span class="who-am-i">${avatar(S.uid)}<span id="me-name"></span></span>`;
-    $("#me-name").textContent = nameOf(S.uid);
+    $("#me-name").innerHTML = S.loaded ? nameHTML(S.uid) : esc(nameOf(S.uid));
     $("#me-name").insertAdjacentHTML("afterbegin", commish(S.uid));
     if(S.loaded) $("#me-name").insertAdjacentHTML("beforeend", crown(S.uid));
     document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected", String(!S.page && t.dataset.tab===S.tab)));
@@ -682,7 +682,7 @@ function crowdHTML(c,f){
   picksForFight(c.id,f.id).forEach(p=>(p.side==="red"?red:blue).push(p.user_id));
   const n = red.length+blue.length;
   if(!n) return locked0(c) ? `<div class="crowd"><span class="note">Nobody picked this one.</span></div>` : "";
-  const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${commish(id)}${esc(nameOf(id))}${crown(id)}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
+  const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${commish(id)}${nameHTML(id)}${crown(id)}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
   return `<div class="crowd"><span class="label">League picks · <span class="nw">${red.length}–${blue.length}</span></span>
     <div class="bar" aria-hidden="true"><i style="width:${red.length/n*100}%;background:var(--red)"></i><i style="width:${blue.length/n*100}%;background:var(--blue)"></i></div>
     <div class="who"><span style="color:var(--red)">${esc(f.red)}:</span>${red.map(desc).join("")||"<span>none</span>"}</div>
@@ -706,13 +706,15 @@ function weekStandings(c){ return cached("week:"+c.id, ()=>{
     const r = cardRecord(id,c); const L = lockInfo(id,c);
     return { id, w:r.w, l:r.l, lw:L&&L.hit===true?1:0, ll:(L&&L.hit===false)||lockMissed(id,c)?1:0, picked:(c.fights||[]).some(f=>pickOf(id,c.id,f.id)) };
   }).filter(r=>r.w+r.l>0 || r.picked);
-  rows.sort((a,b)=>b.w-a.w || a.l-b.l || b.lw-a.lw || a.ll-b.ll || nameOf(a.id).localeCompare(nameOf(b.id)));
+  const top = cardChamps(c);
+  rows.forEach(r=>{ r.champ = top.has(r.id); });
+  rows.sort((a,b)=>(b.champ-a.champ) || b.w-a.w || a.l-b.l || b.lw-a.lw || a.ll-b.ll || nameOf(a.id).localeCompare(nameOf(b.id)));
   return rows;
 }); }
 // the table both views share; tied players (same record and same lock record) share a place: T-2, T-2, then 4
 function boardTable(rows, showLock, allTime){
   let h = `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
-  const same = (a,b) => !!a && !!b && a.w===b.w && a.l===b.l && a.lw===b.lw && a.ll===b.ll && a.ranked===b.ranked;
+  const same = (a,b) => !!a && !!b && a.w===b.w && a.l===b.l && a.lw===b.lw && a.ll===b.ll && a.ranked===b.ranked && !!a.champ===!!b.champ;
   let place = 0;
   rows.forEach((r,i)=>{
     const unranked = allTime && !r.ranked;
@@ -720,13 +722,13 @@ function boardTable(rows, showLock, allTime){
       const need = Math.max(1, minCards()), total = scoredCards().length;
       h += `<tr class="divider"><td colspan="4">Not ranked yet · play ${need} of ${total} ${total===1?"card":"cards"} to qualify</td></tr>`;
     }
-    if(!same(rows[i-1], r)) place = i+1;
-    const tied = same(rows[i-1], r) || same(rows[i+1], r);
+    if(!same(rows[i-1], r)) place = r.champ ? 1 : i+1;
+    const tied = r.champ ? rows.filter(x=>x.champ).length>1 : (same(rows[i-1], r) || same(rows[i+1], r));
     const rk = unranked ? "–" : tied ? `<span class="t">T-</span>${place}` : place;
     const sub = allTime ? `<span class="pct">${fmtPct(r)}</span>` : "";
     const under = allTime ? `<span class="cardsplayed">${r.cards} ${r.cards===1?"card":"cards"}${crown(r.id)}</span>` : showLock ? lockTag(r.id,true) : "";
-    h += `<tr class="${!unranked&&place===1&&r.w>0?"top":""}${unranked?" unranked":""}"><td class="rk">${rk}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${allTime?"":crown(r.id)}</span>${under}</span><span class="chev" aria-hidden="true">›</span></button></td>
+    h += `<tr class="${!unranked&&place===1&&(r.w>0||r.champ)?"top":""}${unranked?" unranked":""}"><td class="rk">${rk}</td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${nameHTML(r.id, allTime ? undefined : !!r.champ)}${r.id===S.uid?" (you)":""}</span></span>${under}</span><span class="chev" aria-hidden="true">›</span></button></td>
       <td class="tot">${r.w}–${r.l}${sub}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
   return h + `</tbody></table></div>`;
@@ -783,6 +785,16 @@ function lastWinnersCalc(){
 }
 // numbered cards ("UFC 333: ...") return their number; Fight Nights and anything else return null
 function cardNumber(c){ const m = /^UFC\s+(\d+)\b/i.exec(String(c?.name||"").trim()); return m ? m[1] : null; }
+// reigning champ(s): first place on the most recent fully graded card, until the next card starts
+function champs(){ return cached("champs", ()=>{
+  const P = lastWinners(); if(!P.card) return new Set();
+  const next = S.cards.some(c=>c.id!==P.card.id && String(c.date) > String(P.card.date) && cardLocked(c));
+  return next ? new Set() : P.ids;
+}); }
+// a card's first place, once every fight on it has a result
+function cardChamps(c){ return (c.fights||[]).length && c.fights.every(f=>f.res && f.res.w) ? cardPodium(c).ids : new Set(); }
+// a player's name, in glowing gold when they're a champ
+function nameHTML(id, gold){ const n = esc(nameOf(id)); return (gold ?? champs().has(id)) ? `<span class="champ">${n}</span>` : n; }
 // every belt each player has won: gold for winning a card, silver for second (ties share).
 // num: numbered-card belts, each one its own ({m, num, name}); fn: Fight Night belts, counted
 function beltCounts(){ return cached("belts", ()=>{
@@ -838,7 +850,7 @@ function playerHTML(uid){
   const me = uid===S.uid;
   const r = standings().find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0};
   let h = `<button class="backbtn" data-act="back">‹ Standings</button>
-    <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${commish(uid)}${esc(nameOf(uid))}${crown(uid)}${me?" (you)":""}</h2>
+    <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${commish(uid)}${nameHTML(uid)}${crown(uid)}${me?" (you)":""}</h2>
       <div class="pstats"><span><b class="nw">${r.w}–${r.l}</b> picks${r.w+r.l?` (${fmtPct(r)})`:""}</span><span class="lk-stat"><b class="nw">${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
   const c = currentCard();
   if(!c) return h + emptyHTML("No cards yet","Their picks will show up here once a card is posted.");
