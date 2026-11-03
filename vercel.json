@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/fphoto/ufc/:path*", "destination": "https://www.ufc.com/images/:path*" },
+    { "source": "/fphoto/wm/:path*", "destination": "https://upload.wikimedia.org/:path*" }
+  ],
+  "headers": [
+    { "source": "/fphoto/(.*)", "headers": [ { "key": "Cache-Control", "value": "public, max-age=604800" } ] }
+  ]
+}

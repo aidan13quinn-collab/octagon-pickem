@@ -570,12 +570,13 @@ function picksHTML(){
     const allIn = done===live.length;
     const nm = L ? String(L.side==="red"?L.f.red:L.f.blue).trim().split(/\s+/).pop() : "";
     const tip = !L ? "Lock your surest pick. Any missed picks or locks count as wrong." : !allIn ? "Any missed picks count as wrong." : "";
-    h += `<div class="progress"><span class="ppill ${allIn?"ok":""}">${allIn?"✓ ":""}${done}/${live.length} picked</span><span class="ppill lockp ${L?"ok":""}">${lockSVG}${L?`Lock: ${esc(nm)}`:"Lock not set"}</span>${tip?`<span class="ptip">${tip}</span>`:""}</div>`;
+    h += `<div class="progress"><span class="ppill ${allIn?"ok":""}">${allIn?"✓ ":""}${done}/${live.length} picked</span><span class="ppill lockp ${L?"ok":""}">${lockSVG}${L?`Lock: ${esc(nm)}`:"Lock not set"}</span>${done?`<button class="sharebtn" data-act="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>Share</button>`:""}${tip?`<span class="ptip">${tip}</span>`:""}</div>`;
   } else if(fights.length){
     const nm = L ? (L.side==="red"?L.f.red:L.f.blue) : "";
     h += `<div class="lockstrip ${L?"set":""}"><span class="lockicon" aria-hidden="true">${lockSVG}</span>
       <span class="ls-t">${L?`Lock: ${esc(nm)}`:(locked?"No lock this week":"Lock of the week")}</span>
       <span class="ls-v">${L?(L.hit===null?"Pending":L.hit==="push"?"Push":L.hit?"Hit":"Missed"):lockMissed(S.uid,c)?"Missed":(locked?"":"Pick a fighter, then lock it")}</span></div>`;
+    if(live.some(f=>pickOf(S.uid,c.id,f.id))) h += `<div class="progress"><button class="sharebtn" data-act="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>Share my picks</button></div>`;
   }
   if(!live.length) h += emptyHTML("No bouts on this card","Bouts will appear here once they're announced.");
 
@@ -889,6 +890,148 @@ function playerHTML(uid){
   return h;
 }
 
+/* ---------- share my picks: a phone-story image (1080×1920) of every matchup, your side lit up, lock on top ---------- */
+// fighter photos come through our own address (see vercel.json) so the browser lets us draw them into the image
+function photoProxy(u){
+  if(!u) return null;
+  let m = /^https:\/\/(?:www\.)?ufc\.com\/images\/(.+)$/.exec(u); if(m) return "/fphoto/ufc/" + m[1];
+  m = /^https:\/\/upload\.wikimedia\.org\/(.+)$/.exec(u); if(m) return "/fphoto/wm/" + m[1];
+  return null;
+}
+function loadImg(src){ return new Promise(res=>{ if(!src) return res(null); const i=new Image(); i.crossOrigin="anonymous"; i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; setTimeout(()=>res(null), 8000); }); }
+async function buildShareImage(uid, c, withPhotos){
+  const W=1080, H=1920, X=44;
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H; const g=cv.getContext("2d");
+  const DISP='"Big Shoulders Display","Arial Narrow",Impact,sans-serif', LAB='"Barlow Condensed","Arial Narrow",sans-serif', BODY='Barlow,system-ui,sans-serif';
+  try{ await Promise.all(['900 80px "Big Shoulders Display"','700 30px "Barlow Condensed"','600 30px Barlow','500 30px Barlow'].map(f=>document.fonts.load(f))); }catch(e){}
+  const C={bg:"#111318",panel:"#1A1D24",line:"#2C303A",ink:"#ECEEF3",muted:"#9AA0AE",dim:"#5B606C",gold:"#E0B154",red:"#F0566A",blue:"#6E95F0"};
+  const rr=(x,y,w,h,r)=>{ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); };
+  const fit=(txt,font,size,max)=>{ let s=size; do{ g.font=font.replace("$",s); if(g.measureText(txt).width<=max) break; s-=2; }while(s>12); return s; };
+  const clip=(txt,max)=>{ if(g.measureText(txt).width<=max) return txt; while(txt.length>1 && g.measureText(txt+"…").width>max) txt=txt.slice(0,-1); return txt+"…"; };
+
+  // background + header band (red / dark / blue, like the site header)
+  g.fillStyle=C.bg; g.fillRect(0,0,W,H);
+  const band=300;
+  g.save(); g.beginPath(); g.rect(0,0,W,band); g.clip();
+  g.fillStyle="#3a1a20"; g.fillRect(0,0,W,band);
+  g.fillStyle="#0c0d10"; g.beginPath(); g.moveTo(W*.42,0); g.lineTo(W*.66,0); g.lineTo(W*.56,band); g.lineTo(W*.32,band); g.closePath(); g.fill();
+  g.fillStyle="#1d2a4a"; g.beginPath(); g.moveTo(W*.66,0); g.lineTo(W,0); g.lineTo(W,band); g.lineTo(W*.56,band); g.closePath(); g.fill();
+  g.restore();
+  g.fillStyle=C.gold; g.font=`700 30px ${LAB}`; g.textBaseline="alphabetic"; if("letterSpacing" in g) g.letterSpacing="6px";
+  g.fillText("FIGHT WEEK", X, 84); if("letterSpacing" in g) g.letterSpacing="0px";
+  const nm = String(c.name||"");
+  const ix = nm.indexOf(":");
+  const l1 = (ix>0 ? nm.slice(0,ix).replace(/^UFC Fight Night$/i,"Fight Night") : "").toUpperCase();
+  const l2 = (ix>0 ? nm.slice(ix+1) : nm).trim().toUpperCase();
+  g.fillStyle="#fff";
+  let s1 = l1 ? fit(l1,`900 $px ${DISP}`,76,W-2*X) : 0; if(l1){ g.font=`900 ${s1}px ${DISP}`; g.fillText(l1, X, 160); }
+  const s2 = fit(l2,`900 $px ${DISP}`,76,W-2*X); g.font=`900 ${s2}px ${DISP}`; g.fillText(l2, X, l1?232:180);
+  g.font=`600 30px ${BODY}`; const who=nameOf(uid); g.fillStyle="#fff"; g.fillText(who, X, 276);
+  const ww=g.measureText(who).width; g.fillStyle="rgba(255,255,255,.7)"; g.font=`500 30px ${BODY}`;
+  g.fillText(`'s picks${c.date?" · "+fmtDate(c.date):""}`, X+ww, 276);
+
+  // rows: lock first, then the card in order
+  const live=(c.fights||[]).filter(f=>!isOff(f));
+  const L=lockInfo(uid,c);
+  const order = L ? [L.f, ...live.filter(f=>f.id!==L.f.id)] : live;
+  const photos = {};
+  if(withPhotos){
+    const names=[...new Set(order.flatMap(f=>[f.red,f.blue]))];
+    const imgs=await Promise.all(names.map(n=>loadImg(photoProxy(S.fighters[n]?.photo_url))));
+    names.forEach((n,i)=>{ if(imgs[i]) photos[n]={img:imgs[i], ufc:/ufc\.com/.test(S.fighters[n]?.photo_url||"")}; });
+  }
+  const top=band+40, bottom=H-120, gap=12, n=order.length||1;
+  const lockExtra = L ? 1.3 : 1;
+  const rh = Math.min(118, (bottom-top-gap*(n-1)) / (n-1+lockExtra));
+  let y=top;
+  const face=(name, cx, cy, r, side, picked, lock)=>{
+    g.save(); g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.closePath();
+    g.fillStyle = side==="red" ? "#3A1C22" : "#1A2540"; g.fill(); g.clip();
+    const P=photos[name];
+    if(P){ const im=P.img, box=r*2, x0=cx-r, y0=cy-r; const sc=Math.max(box/im.width, box/im.height); let dw=im.width*sc, dh=im.height*sc;
+      let dx=(box-dw)*.5, dy=(box-dh)*(P.ufc?0:.2);
+      if(P.ufc){ const z=1.35, ox=box*.5, oy=box*.08; dx=ox+(dx-ox)*z; dy=oy+(dy-oy)*z; dw*=z; dh*=z; }
+      g.drawImage(im, x0+dx, y0+dy, dw, dh);
+    } else {
+      g.fillStyle = side==="red" ? C.red : C.blue; g.globalAlpha=.9; g.font=`900 ${Math.round(r*.8)}px ${DISP}`; g.textAlign="center"; g.textBaseline="middle";
+      g.fillText(String(name).split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).join("").toUpperCase(), cx, cy+2); g.globalAlpha=1; g.textAlign="left"; g.textBaseline="alphabetic";
+    }
+    if(!picked){ g.fillStyle="rgba(17,19,24,.62)"; g.fillRect(cx-r,cy-r,r*2,r*2); }
+    g.restore();
+    if(picked){ g.save(); g.lineWidth = lock?7:5; g.strokeStyle = lock?C.gold:(side==="red"?C.red:C.blue);
+      if(lock){ g.shadowColor="rgba(224,177,84,.8)"; g.shadowBlur=24; }
+      g.beginPath(); g.arc(cx,cy,r+1,0,Math.PI*2); g.stroke(); g.restore(); }
+  };
+  const lockIcon=(x,y,s,col)=>{ g.save(); g.strokeStyle=col; g.lineWidth=s*.13; g.lineCap="round"; g.lineJoin="round";
+    rr(x, y+s*.42, s*.8, s*.56, s*.1); g.stroke(); g.beginPath(); g.moveTo(x+s*.18,y+s*.42); g.lineTo(x+s*.18,y+s*.28); g.arc(x+s*.4,y+s*.28,s*.22,Math.PI,0); g.lineTo(x+s*.62,y+s*.42); g.stroke(); g.restore(); };
+
+  order.forEach((f,i)=>{
+    const lock = !!(L && L.f.id===f.id), h = lock ? rh*1.3 : rh, p = pickOf(uid,c.id,f.id);
+    g.save(); rr(X, y, W-2*X, h, 20);
+    if(lock){ const gr=g.createLinearGradient(X,0,W-X,0); gr.addColorStop(0,"rgba(224,177,84,.24)"); gr.addColorStop(1,"rgba(224,177,84,.06)");
+      g.shadowColor="rgba(224,177,84,.35)"; g.shadowBlur=40; g.fillStyle=C.panel; g.fill(); g.shadowBlur=0; g.fillStyle=gr; g.fill(); g.lineWidth=3; g.strokeStyle=C.gold; g.stroke(); }
+    else { g.fillStyle=C.panel; g.fill(); g.lineWidth=2; g.strokeStyle=C.line; g.stroke(); }
+    g.restore();
+    const r = h*.36, pad = 18, cy = y+h/2;
+    face(f.red, X+pad+r, cy, r, "red", p==="red", lock && p==="red");
+    face(f.blue, W-X-pad-r, cy, r, "blue", p==="blue", lock && p==="blue");
+    const midX=W/2, nameMax = (W-2*X)/2 - (pad+2*r+22) - 34;
+    g.fillStyle=C.muted; g.font=`700 ${Math.round(Math.max(20,h*.2))}px ${LAB}`; g.textAlign="center"; g.textBaseline="middle"; g.fillText("VS", midX, cy+1);
+    [["red", X+pad+2*r+20, "left"], ["blue", W-X-pad-2*r-20, "right"]].forEach(([side, x, al])=>{
+      const picked = p===side, name = side==="red"?f.red:f.blue;
+      const size = Math.round(lock ? h*.27 : h*.27);
+      g.textAlign=al; g.textBaseline="middle";
+      g.font = `${picked?"600":"500"} ${size}px ${BODY}`;
+      g.fillStyle = picked ? (lock ? C.gold : C.ink) : C.dim;
+      const t = clip(name, nameMax);
+      if(lock && picked){
+        const ls=Math.round(h*.17); g.font=`700 ${ls}px ${LAB}`; g.fillStyle=C.gold; if("letterSpacing" in g) g.letterSpacing="3px";
+        const lw=g.measureText("LOCK").width, ix2 = al==="left" ? x : x-lw-ls*1.1;
+        lockIcon(ix2, cy-h*.3, ls*.95, C.gold); g.textAlign="left"; g.fillText("LOCK", ix2+ls*1.1, cy-h*.22+ls*.45); if("letterSpacing" in g) g.letterSpacing="0px";
+        g.textAlign=al; g.font=`700 ${size}px ${BODY}`; g.fillStyle=C.gold; g.fillText(clip(name,nameMax), x, cy+h*.14);
+      } else g.fillText(t, x, cy+1);
+    });
+    g.textAlign="left"; g.textBaseline="alphabetic";
+    y += h + gap;
+  });
+
+  // footer
+  g.fillStyle=C.line; g.fillRect(X, H-96, W-2*X, 2);
+  const picked = live.filter(f=>pickOf(uid,c.id,f.id)).length;
+  g.fillStyle=C.muted; g.font=`500 28px ${BODY}`; g.fillText(`${picked} of ${live.length} picked · ${L?"1 lock":"no lock"}`, X, H-44);
+  g.fillStyle=C.gold; g.font=`700 28px ${LAB}`; g.textAlign="right"; if("letterSpacing" in g) g.letterSpacing="5px"; g.fillText("FIGHT WEEK", W-X, H-44); if("letterSpacing" in g) g.letterSpacing="0px"; g.textAlign="left";
+
+  return new Promise((res,rej)=>{ try{ cv.toBlob(b=>b?res(b):rej(new Error("no image")), "image/png"); }catch(e){ rej(e); } });
+}
+let shareBusy=false;
+async function sharePicks(c){
+  if(shareBusy || !c) return; shareBusy=true; toast("Making your picks image…");
+  let blob;
+  try { blob = await buildShareImage(S.uid, c, true); }
+  catch(e){ try { blob = await buildShareImage(S.uid, c, false); } catch(e2){ shareBusy=false; toast("Couldn't make the image. Try again."); return; } }
+  shareBusy=false;
+  const short = String(c.name||"picks").split(":")[0].trim().replace(/\s+/g,"-").toLowerCase();
+  const file = new File([blob], `fight-week-${short}.png`, { type:"image/png" });
+  const url = URL.createObjectURL(blob);
+  const canShare = !!(navigator.canShare && navigator.canShare({ files:[file] }));
+  const el = document.createElement("div"); el.className="sharesheet"; el.setAttribute("role","dialog"); el.setAttribute("aria-label","Your picks image");
+  el.innerHTML = `<div class="ss-inner"><img src="${url}" alt="Your picks for ${esc(c.name)}"><div class="ss-btns">
+    ${canShare?`<button class="btn gold" data-ss="share">Save or share</button>`:`<a class="btn gold" href="${url}" download="${esc(file.name)}">Download image</a>`}
+    <button class="btn ghost" data-ss="close">Close</button></div>
+    <p class="note">${isIOS()?"Or press and hold the image and tap Save to Photos.":"Or right-click the image to save it."}</p></div>`;
+  const close = ()=>{ el.remove(); URL.revokeObjectURL(url); document.removeEventListener("keydown", onKey); };
+  const onKey = e=>{ if(e.key==="Escape") close(); };
+  el.addEventListener("click", async e=>{
+    const b=e.target.closest("[data-ss]");
+    if(!b){ if(e.target===el) close(); return; }
+    if(b.dataset.ss==="close") close();
+    if(b.dataset.ss==="share"){ try{ await navigator.share({ files:[file], title:"My Fight Week picks" }); }catch(err){} }
+  });
+  document.addEventListener("keydown", onKey);
+  clearTimeout(toast._t); $("#toast").hidden=true;
+  document.body.appendChild(el);
+}
+
 /* ---------- events ---------- */
 $("#tabs").addEventListener("click", e=>{
   const t=e.target.closest(".tab"); if(!t) return;
@@ -925,6 +1068,7 @@ $("#app").addEventListener("click", e=>{
   if(act==="pcard"){ S.cardId=b.dataset.card; render(); return; }
   if(act==="hist"){ const k=b.dataset.key; S.openForm.has(k)?S.openForm.delete(k):S.openForm.add(k); render(); return; }
   const c=currentCard(); if(!c) return;
+  if(act==="share"){ sharePicks(c); return; }
   const f=(c.fights||[]).find(x=>x.id===b.dataset.fight); if(!f) return;
   if(act==="pick") setPick(c,f,b.dataset.v);
   if(act==="lock") toggleLock(c,f);
