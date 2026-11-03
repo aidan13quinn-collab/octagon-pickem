@@ -80,6 +80,8 @@ function lockInfo(uid, c){
   return { f, side, odds: side==="red"?f.oddsRed:f.oddsBlue, hit };
 }
 
+// players who have made at least one pick, on any card
+function pickedEver(uid){ return cached("pickers", ()=>{ const s = new Set(); for(const p of S.pickMap.values()) s.add(p.user_id); return s; }).has(uid); }
 function players(){ return cached("players", ()=>{
   const ids = new Set(Object.keys(S.profiles));
   for(const p of S.pickMap.values()) ids.add(p.user_id);
@@ -98,7 +100,7 @@ function standings(){ return cached("standings", ()=>{
       if(L && L.hit===true) lw++; else if(L && L.hit===false) ll++;
     }
     return {id,w,l,lw,ll,cards};
-  });
+  }).filter(r=>pickedEver(r.id));
   // ranked: played enough cards, by win % then most correct, fewer misses, then the lock record
   const need = Math.max(1, minCards());
   rows.forEach(r=>{ r.ranked = r.cards>=need && r.w+r.l>0; });
@@ -556,13 +558,18 @@ function picksHTML(){
       ${cw+cl?`<span class="pill gold"><span class="nw">${cw}–${cl}</span> this card</span>`:""}
     </div>${cardSelect()}</div>`;
 
-  if(fights.length){
+  if(!locked && live.length){
+    // progress pills: fights picked and this week's lock, with a one-line reminder until both are done
+    const allIn = done===live.length;
+    const nm = L ? String(L.side==="red"?L.f.red:L.f.blue).trim().split(/\s+/).pop() : "";
+    const tip = !L ? "Lock your surest pick. Any missed picks count as wrong." : !allIn ? "Any missed picks count as wrong." : "";
+    h += `<div class="progress"><span class="ppill ${allIn?"ok":""}">${allIn?"✓ ":""}${done}/${live.length} picked</span><span class="ppill lockp ${L?"ok":""}">${lockSVG}${L?`Lock: ${esc(nm)}`:"Lock not set"}</span>${tip?`<span class="ptip">${tip}</span>`:""}</div>`;
+  } else if(fights.length){
     const nm = L ? (L.side==="red"?L.f.red:L.f.blue) : "";
     h += `<div class="lockstrip ${L?"set":""}"><span class="lockicon" aria-hidden="true">${lockSVG}</span>
       <span class="ls-t">${L?`Lock: ${esc(nm)}`:(locked?"No lock this week":"Lock of the week")}</span>
       <span class="ls-v">${L?(L.hit===null?"Pending":L.hit==="push"?"Push":L.hit?"Hit":"Missed"):(locked?"":"Pick a fighter, then lock it")}</span></div>`;
   }
-  if(!locked && live.length) h += `<p class="note">${done} of ${live.length} picked. Picks save automatically and lock when the first fight starts.</p>`;
   if(!live.length) h += emptyHTML("No bouts on this card","Bouts will appear here once they're announced.");
 
   // cancelled bouts are left off the page (players still get the "fight cancelled" notification)
