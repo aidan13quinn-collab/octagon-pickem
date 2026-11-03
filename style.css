@@ -351,3 +351,8 @@ img{max-width:100%}
 .pmeta h2 .belt .bx{font-size:16px}
 /* standings: All time / Week by week switch */
 .boardseg button{padding:8px 10px;font-size:14px}
+/* all-time board: win % under the record, and the not-yet-ranked section */
+.board td.tot .pct{display:block;font-family:var(--f-label);font-weight:600;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.board tr.divider td{text-align:left;padding:18px 6px 8px;font-family:var(--f-label);font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.board tr.unranked td.tot,.board tr.unranked td.lockrec{opacity:.6}
+.board td.nm .cardsplayed{display:block;white-space:nowrap;font-size:12px;font-weight:500;color:var(--muted);margin-top:1px}

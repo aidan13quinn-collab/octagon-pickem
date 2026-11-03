@@ -53,17 +53,24 @@ function picksForFight(cardId, fightId){
   return idx.get(cardId+"|"+fightId) || [];
 }
 // 1 = correct, 0 = wrong, null = not graded / doesn't count
-// owes = the player was in the league before this card locked, so a missing pick counts as a miss
+// owes = the player made at least one pick on this card, so a fight they left blank counts as a miss.
+// A card with no picks at all doesn't count for that player.
 function grade(side, f, owes){
   if(!f.res || !f.res.w) return null;
   if(f.res.w==="cancelled" || f.res.w==="draw") return null;
   if(!side) return owes ? 0 : null;
   return side===f.res.w ? 1 : 0;
 }
-function owes(uid, c){
-  const j = S.profiles[uid]?.created_at;
-  return !j || !c.lock_at || Date.parse(j) <= Date.parse(c.lock_at);
-}
+function playedSet(){ return cached("played", ()=>{ const s = new Set(); for(const p of S.pickMap.values()) s.add(p.user_id+"|"+p.card_id); return s; }); }
+function played(uid, c){ return playedSet().has(uid+"|"+c.id); }
+function owes(uid, c){ return played(uid, c); }
+// cards that count toward the all-time board: locked, with at least one fight that has a counted result
+function scoredCards(){ return cached("scored", ()=>S.cards.filter(c=>cardLocked(c) && (c.fights||[]).some(f=>f.res && f.res.w && f.res.w!=="cancelled" && f.res.w!=="draw"))); }
+// share of scored cards a player must have played to be ranked on the all-time board
+const MIN_PLAYED_SHARE = 0.5;
+function minCards(){ return Math.ceil(scoredCards().length * MIN_PLAYED_SHARE); }
+const pctOf = r => r.w+r.l ? r.w/(r.w+r.l) : 0;
+const fmtPct = r => r.w+r.l ? Math.round(pctOf(r)*100)+"%" : "–";
 function lockInfo(uid, c){
   const l = lockRow(uid, c.id); if(!l) return null;
   const f = (c.fights||[]).find(x=>x.id===l.fight_id); if(!f || isOff(f)) return null;
@@ -80,7 +87,8 @@ function players(){ return cached("players", ()=>{
 }); }
 function standings(){ return cached("standings", ()=>{
   const rows = players().map(id=>{
-    let w=0,l=0,lw=0,ll=0;
+    let w=0,l=0,lw=0,ll=0,cards=0;
+    for(const c of scoredCards()) if(played(id,c)) cards++;
     for(const c of S.cards){
       for(const f of (c.fights||[])){
         const g = grade(pickOf(id,c.id,f.id), f, owes(id,c));
@@ -89,9 +97,12 @@ function standings(){ return cached("standings", ()=>{
       const L = lockInfo(id,c);
       if(L && L.hit===true) lw++; else if(L && L.hit===false) ll++;
     }
-    return {id,w,l,lw,ll};
+    return {id,w,l,lw,ll,cards};
   });
-  rows.sort((a,b)=>b.w-a.w || a.l-b.l || b.lw-a.lw || a.ll-b.ll || nameOf(a.id).localeCompare(nameOf(b.id)));
+  // ranked: played enough cards, by win % then most correct, fewer misses, then the lock record
+  const need = Math.max(1, minCards());
+  rows.forEach(r=>{ r.ranked = r.cards>=need && r.w+r.l>0; });
+  rows.sort((a,b)=>(b.ranked-a.ranked) || pctOf(b)-pctOf(a) || b.w-a.w || a.l-b.l || b.lw-a.lw || a.ll-b.ll || nameOf(a.id).localeCompare(nameOf(b.id)));
   return rows;
 }); }
 
@@ -684,16 +695,24 @@ function weekStandings(c){ return cached("week:"+c.id, ()=>{
   return rows;
 }); }
 // the table both views share; tied players (same record and same lock record) share a place: T-2, T-2, then 4
-function boardTable(rows, showLock){
+function boardTable(rows, showLock, allTime){
   let h = `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
-  const same = (a,b) => !!a && !!b && a.w===b.w && a.l===b.l && a.lw===b.lw && a.ll===b.ll;
+  const same = (a,b) => !!a && !!b && a.w===b.w && a.l===b.l && a.lw===b.lw && a.ll===b.ll && a.ranked===b.ranked;
   let place = 0;
   rows.forEach((r,i)=>{
+    const unranked = allTime && !r.ranked;
+    if(unranked && (i===0 || rows[i-1].ranked)){
+      const need = Math.max(1, minCards()), total = scoredCards().length;
+      h += `<tr class="divider"><td colspan="4">Not ranked yet · play ${need} of ${total} ${total===1?"card":"cards"} to qualify</td></tr>`;
+    }
     if(!same(rows[i-1], r)) place = i+1;
     const tied = same(rows[i-1], r) || same(rows[i+1], r);
-    h += `<tr class="${place===1&&r.w>0?"top":""}"><td class="rk">${tied?`<span class="t">T-</span>${place}`:place}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${crown(r.id)}</span>${showLock?lockTag(r.id,true):""}</span><span class="chev" aria-hidden="true">›</span></button></td>
-      <td class="tot">${r.w}–${r.l}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
+    const rk = unranked ? "–" : tied ? `<span class="t">T-</span>${place}` : place;
+    const sub = allTime ? `<span class="pct">${fmtPct(r)}</span>` : "";
+    const under = allTime ? `<span class="cardsplayed">${r.cards} ${r.cards===1?"card":"cards"}</span>` : showLock ? lockTag(r.id,true) : "";
+    h += `<tr class="${!unranked&&place===1&&r.w>0?"top":""}${unranked?" unranked":""}"><td class="rk">${rk}</td>
+      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${esc(nameOf(r.id))}${r.id===S.uid?" (you)":""}</span>${crown(r.id)}</span>${under}</span><span class="chev" aria-hidden="true">›</span></button></td>
+      <td class="tot">${r.w}–${r.l}${sub}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
   });
   return h + `</tbody></table></div>`;
 }
@@ -719,21 +738,27 @@ function boardHTML(){
   if(!rows.length) return h + emptyHTML("No one's on the board yet","Make a pick to join. Standings fill in as results come in.");
   h += `<div class="event-head"><h2>All-time standings</h2><span class="label">${rows.length} ${rows.length===1?"player":"players"}</span></div>`;
   if(!rows.some(r=>r.w+r.l>0)) h += `<p class="note">No results yet. Everyone starts at 0–0.</p>`;
-  h += boardTable(rows);
-  h += `<p class="note">Tap a name to see their picks. Ranked by most correct picks. Ties go to fewer misses, then the better lock record. A fight you didn't pick counts as a miss. Draws, no contests and cancelled bouts don't count.</p>`;
+  h += boardTable(rows, false, true);
+  h += `<p class="note">Tap a name to see their picks. Ranked by win %, then most correct picks, fewer misses and the better lock record. To be ranked, play at least half of the cards so far. Cards you skip entirely don't count against you, but on a card you play, a fight you leave blank counts as a miss. Draws, no contests and cancelled bouts don't count.</p>`;
   return h;
 }
 
 // last week's winner(s): most correct picks on the most recent fully graded card
 function lastWinners(){ return cached("winners", lastWinnersCalc); }
+// manual belt calls for specific cards (gold/silver player ids)
+const BELT_OVERRIDES = {
+  "ufc-fight-night-october-31-2026": { gold:["ca0766ad-8794-4c93-bd7e-85f8729ce20c"], silver:["00867612-1642-4bd0-9e9a-8d3cb66a4e89"] } // ericfriedman gold, Briewe silver
+};
 function cardPodium(c){
+  const O = BELT_OVERRIDES[c.id];
+  if(O){ const ids=new Set(O.gold||[]), silver=new Set(O.silver||[]); const rec=id=>cardRecord(id,c).w; return { card:c, ids, silver, best: ids.size?Math.max(...[...ids].map(rec)):0, second: silver.size?Math.max(...[...silver].map(rec)):0 }; }
   let best = 0; const recs = {};
   players().forEach(id=>{ const r = cardRecord(id,c); recs[id]=r; if(r.w>best) best=r.w; });
   const ids = new Set(best>0 ? Object.keys(recs).filter(id=>recs[id].w===best) : []);
   // second place: the next-best number of correct picks (ties all get silver)
   let second = 0;
   Object.values(recs).forEach(r=>{ if(r.w<best && r.w>second) second=r.w; });
-  const silver = new Set(second>0 ? Object.keys(recs).filter(id=>recs[id].w===second) : []);
+  const silver = new Set(second>0 && ids.size===1 ? Object.keys(recs).filter(id=>recs[id].w===second) : []);
   return { card:c, ids, best, silver, second };
 }
 function gradedCards(){ return S.cards.filter(c=>(c.fights||[]).length && c.fights.every(f=>f.res && f.res.w)).sort((a,b)=>String(b.date).localeCompare(String(a.date))); }
@@ -783,7 +808,7 @@ function playerHTML(uid){
   const r = standings().find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0};
   let h = `<button class="backbtn" data-act="back">‹ Standings</button>
     <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${commish(uid)}${esc(nameOf(uid))}${crown(uid)}${me?" (you)":""}</h2>
-      <div class="pstats"><span><b class="nw">${r.w}–${r.l}</b> picks</span><span class="lk-stat"><b class="nw">${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
+      <div class="pstats"><span><b class="nw">${r.w}–${r.l}</b> picks${r.w+r.l?` (${fmtPct(r)})`:""}</span><span class="lk-stat"><b class="nw">${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
   const c = currentCard();
   if(!c) return h + emptyHTML("No cards yet","Their picks will show up here once a card is posted.");
 
@@ -793,7 +818,8 @@ function playerHTML(uid){
     h += `<div class="cardhist">${past.map(x=>{
       const cr = cardRecord(uid,x), L = lockInfo(uid,x);
       const lk = L ? (L.hit===null?"lock pending":L.hit==="push"?"lock push":L.hit?"lock hit":"lock missed") : "no lock";
-      return `<button class="ch ${x.id===c.id?"on":""}" data-act="pcard" data-card="${esc(x.id)}"><span class="ch-n">${esc(x.name)}</span><span class="ch-r"><span class="nw">${cr.w}–${cr.l}</span> · ${lk}</span></button>`;
+      const rec = played(uid,x) ? `<span class="nw">${cr.w}–${cr.l}</span> · ${lk}` : "didn't play";
+      return `<button class="ch ${x.id===c.id?"on":""}" data-act="pcard" data-card="${esc(x.id)}"><span class="ch-n">${esc(x.name)}</span><span class="ch-r">${rec}</span></button>`;
     }).join("")}</div>`;
   }
 
