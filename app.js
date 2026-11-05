@@ -4,7 +4,7 @@
 // The site's files are uploaded one at a time, so a phone can briefly end up with this app.js next to an
 // older style.css (or keep an old copy cached). style.css carries the same build stamp; if they don't match,
 // fetch fresh copies of both and reload once.
-const BUILD = "2026-11-06d";
+const BUILD = "2026-11-06e";
 (function selfHeal(){
   try{
     const css = getComputedStyle(document.documentElement).getPropertyValue("--fw-build").replace(/["'\s]/g,"");
@@ -545,6 +545,16 @@ async function saveName(){
 
 /* ---------- edit profile: nickname, color, flag, favorite fighter ---------- */
 const FLAGS = [["us","United States"],["ca","Canada"],["mx","Mexico"],["br","Brazil"],["gb-eng","England"],["gb-sct","Scotland"],["gb-wls","Wales"],["ie","Ireland"],["au","Australia"],["nz","New Zealand"],["de","Germany"],["fr","France"],["es","Spain"],["it","Italy"],["pt","Portugal"],["nl","Netherlands"],["pl","Poland"],["se","Sweden"],["ru","Russia"],["ua","Ukraine"],["ge","Georgia"],["am","Armenia"],["kz","Kazakhstan"],["kg","Kyrgyzstan"],["uz","Uzbekistan"],["tr","Turkey"],["il","Israel"],["lb","Lebanon"],["ng","Nigeria"],["cm","Cameroon"],["za","South Africa"],["cn","China"],["jp","Japan"],["kr","South Korea"],["ph","Philippines"],["in","India"],["ar","Argentina"],["co","Colombia"],["pe","Peru"],["ve","Venezuela"],["cu","Cuba"],["do","Dominican Republic"],["pr","Puerto Rico"],["jm","Jamaica"]];
+// every UFC fighter, past and present (kept up to date weekly from ufc.com); falls back to fighters on our cards
+let rosterNames = null;
+async function loadRoster(){
+  if(rosterNames) return rosterNames;
+  const { data, error } = await fetchAll(()=>sb.from("roster").select("name").order("name"));
+  const names = new Set(error ? [] : (data||[]).map(r=>r.name));
+  Object.keys(S.fighters).forEach(n=>names.add(n));
+  rosterNames = [...names].sort((a,b)=>a.localeCompare(b));
+  return rosterNames;
+}
 function editProfileHTML(){
   const me = S.profiles[S.uid] || {};
   const fighters = Object.keys(S.fighters).sort();
@@ -552,12 +562,11 @@ function editProfileHTML(){
     <span class="grab" aria-hidden="true"></span>
     <div class="eshead"><h3>Edit profile</h3><button type="button" class="esx" data-ed="close" aria-label="Close">×</button></div>
     ${"handle" in me ? `<div class="fld"><label class="label" for="pf-handle">Your @</label><label class="hfield sm"><span>@</span><input id="pf-handle" maxlength="20" autocapitalize="none" autocorrect="off" spellcheck="false" value="${esc(me.handle||"")}"></label></div>` : ""}
-    <div class="fld"><label class="label" for="pf-nick">Nickname</label><input id="pf-nick" maxlength="24" placeholder="The Oracle" value="${esc(me.nickname||"")}"></div>
     <div class="fld"><span class="label">Color</span><div class="swatches" role="radiogroup" aria-label="Profile color">
       ${Object.entries(ACCENTS).map(([k,v])=>`<button type="button" class="sw${(me.accent||"")===k?" on":""}" data-ed="accent" data-v="${k}" role="radio" aria-checked="${(me.accent||"")===k}" aria-label="${k}" style="background:${v}"></button>`).join("")}
       <button type="button" class="sw none${me.accent?"":" on"}" data-ed="accent" data-v="" role="radio" aria-checked="${!me.accent}" aria-label="No color">∅</button></div></div>
     <div class="fld"><label class="label" for="pf-flag">Flag</label><select id="pf-flag"><option value="">No flag</option>${FLAGS.map(([c,n])=>`<option value="${c}" ${me.flag===c?"selected":""}>${esc(n)}</option>`).join("")}</select></div>
-    <div class="fld"><label class="label" for="pf-fav">Favorite fighter</label><input id="pf-fav" maxlength="60" list="pf-fighters" placeholder="Anyone on a card" value="${esc(me.fav_fighter||"")}"><datalist id="pf-fighters">${fighters.map(n=>`<option value="${esc(n)}">`).join("")}</datalist></div>
+    <div class="fld"><label class="label" for="pf-fav">Favorite fighter</label><input id="pf-fav" maxlength="60" list="pf-fighters" placeholder="Start typing any UFC fighter" value="${esc(me.fav_fighter||"")}"><datalist id="pf-fighters">${fighters.map(n=>`<option value="${esc(n)}">`).join("")}</datalist></div>
     <p class="err" id="pf-err" hidden></p>
     <button class="btn gold" type="submit" id="pf-save">Save</button>
   </form></div>`;
@@ -578,7 +587,7 @@ function openEditProfile(){
   el.querySelector("form").addEventListener("submit", async e=>{
     e.preventDefault();
     const err=el.querySelector("#pf-err"), btn=el.querySelector("#pf-save"); err.hidden=true;
-    const row = { nickname: el.querySelector("#pf-nick").value.trim() || null, accent: accent || null,
+    const row = { accent: accent || null,
       flag: el.querySelector("#pf-flag").value || null, fav_fighter: el.querySelector("#pf-fav").value.trim() || null };
     const hIn = el.querySelector("#pf-handle");
     if(hIn){ const h = hIn.value.trim().toLowerCase().replace(/^@/,"");
@@ -590,7 +599,7 @@ function openEditProfile(){
     if(error){ err.textContent = (/duplicate|unique/i.test(error.message||"") || error.code==="23505") ? `@${row.handle} is taken.` : /column/i.test(error.message||"") ? "Profile customizing needs one setup step in the league's database first." : "Couldn't save your profile. Try again."; err.hidden=false; return; }
     S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), ...row }; bump(); close(); render(); toast("Profile updated.");
   });
-  setTimeout(()=>el.querySelector("#pf-nick")?.focus(), 50);
+  loadRoster().then(names=>{ const dl = el.querySelector("#pf-fighters"); if(dl && names.length) dl.innerHTML = names.map(n=>`<option value="${esc(n)}">`).join(""); });
 }
 async function savePassword(){
   const p1=$("#acc-pass").value, p2=$("#acc-pass2").value, err=$("#pass-err"), btn=$("#pass-save");
@@ -677,7 +686,7 @@ function settingsHTML(){
 // Settings tab: one scrolling page of grouped sections
 function settingsTabHTML(){
   const me = S.profiles[S.uid] || {}, email = S.session?.user?.email || "", t = currentTheme();
-  const nick = me.nickname ? `"${esc(me.nickname)}"` : "Add a nickname, color and flag";
+  const nick = me.accent || me.flag || me.fav_fighter ? "Your color, flag and favorite fighter" : "Add a color, flag and favorite fighter";
   let h = `<div class="cmhead"><h2>Settings</h2></div>
   <button class="setme" data-act="editprofile">${avatar(S.uid)}<span class="setmet"><b>${commish(S.uid)}${nameHTML(S.uid)}${flagImg(me.flag)}</b><small>${handleOf(S.uid)?`@${esc(handleOf(S.uid))} · `:""}${nick}</small></span><span class="setedit">Edit profile</span></button>`;
   // notifications
@@ -1107,7 +1116,7 @@ function playerHTML(uid, asTab){
   let h = `${asTab?"":`<button class="backbtn" data-act="back">‹ Leaders</button>`}
   <section class="phero${champ?" champ":""}"${acc&&!champ?` style="--pacc:${acc}"`:""}>
     ${me?`<button class="pedit" data-act="editprofile">Edit</button>`:""}
-    <div class="phtop">${avatar(uid)}<div class="phid">${P.nickname?`<div class="pnick">"${esc(P.nickname)}"</div>`:""}<h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2>${atHTML(uid,"phat")}<div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}</div></div>
+    <div class="phtop">${avatar(uid)}<div class="phid"><h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2>${atHTML(uid,"phat")}<div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}</div></div>
     <div class="tape"><div><b>${r.w}–${r.l}</b><span>Record</span></div><div><b>${r.w+r.l?fmtPct(r):"–"}</b><span>Win %</span></div><div class="tl"><b>${r.lw}–${r.ll}</b><span>Locks</span></div><div><b>${r.cards||0}</b><span>Cards</span></div></div>
   </section>`;
   // belt case

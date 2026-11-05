@@ -595,7 +595,7 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .cardsw{white-space:nowrap;flex:none}
 
 /* build stamp: must match BUILD in app.js */
-:root{--fw-build:"2026-11-06d"}
+:root{--fw-build:"2026-11-06e"}
 /* ---------- community ---------- */
 .cmhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .cmhead h2{margin:0;font-family:var(--f-bug);font-weight:700;font-size:26px;text-transform:uppercase}
