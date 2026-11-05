@@ -4,7 +4,7 @@
 // The site's files are uploaded one at a time, so a phone can briefly end up with this app.js next to an
 // older style.css (or keep an old copy cached). style.css carries the same build stamp; if they don't match,
 // fetch fresh copies of both and reload once.
-const BUILD = "2026-11-05b";
+const BUILD = "2026-11-05c";
 (function selfHeal(){
   try{
     const css = getComputedStyle(document.documentElement).getPropertyValue("--fw-build").replace(/["'\s]/g,"");
@@ -259,7 +259,7 @@ async function toggleLock(c, f){
 /* ---------- render ---------- */
 function preserve(fn){
   const vals={}, active=document.activeElement?.id;
-  document.querySelectorAll("#app input[id]").forEach(el=>vals[el.id]=el.value);
+  document.querySelectorAll("#app input[id], #app textarea[id], #app select[id]:not(#sel-card):not(#cm-tagsel)").forEach(el=>vals[el.id]=el.value);
   fn();
   for(const [id,v] of Object.entries(vals)){ const el=document.getElementById(id); if(el) el.value=v; }
   if(active){ const el=document.getElementById(active); if(el) el.focus(); }
@@ -336,8 +336,6 @@ function tabHTML(){
   if(S.tab==="settings") return S.page ? pageHTML() : settingsMenuHTML();
   return picksHTML();
 }
-// community: empty for now
-function communityHTML(){ return `<div class="event-head"><h2>Community</h2></div>`; }
 // settings tab: the old menu as a list; each row opens its page inside this tab
 function settingsMenuHTML(){
   const row = (attr, icon, label) => `<button class="srow" ${attr}>${icon}<span>${label}</span><span class="chev" aria-hidden="true">›</span></button>`;
@@ -1158,6 +1156,213 @@ async function sharePicks(c){
   document.body.appendChild(el);
 }
 
+/* ---------- community: posts, likes, saves, comments, friends ---------- */
+const COMMISH = "414eba8d-669f-4cbb-8976-abb42c12c228";
+const CM = { loaded:false, loading:false, at:0, error:null, posts:[], likes:new Map(), comments:new Map(), saves:new Set(),
+  friends:[], view:"all", open:new Set(), vis:"public", tag:"", page:null, search:"", busy:false };
+const heartSVG = on => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.2C1.4 8 3.6 4.5 7.1 4.5c2 0 3.6 1.1 4.9 2.8 1.3-1.7 2.9-2.8 4.9-2.8 3.5 0 5.7 3.5 4.4 6.8-1.8 4.6-9.3 9.2-9.3 9.2z" fill="${on?"currentColor":"none"}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
+const bubbleSVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
+const saveSVG = on => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-6-4-6 4z" fill="${on?"currentColor":"none"}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
+const friendsSVG = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2c2.1.7 3.5 2.8 3.5 5.8"/></svg>`;
+const dotsSVG = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`;
+function ago(t){
+  const s = Math.max(0, (Date.now() - Date.parse(t))/1000);
+  if(s < 60) return "now"; if(s < 3600) return Math.floor(s/60)+"m"; if(s < 86400) return Math.floor(s/3600)+"h";
+  if(s < 7*86400) return Math.floor(s/86400)+"d";
+  return new Date(t).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+}
+// friendship with someone: "friends" | "sent" | "received" | null
+function friendState(uid){
+  const f = CM.friends.find(x=>(x.requester===S.uid && x.addressee===uid) || (x.addressee===S.uid && x.requester===uid));
+  if(!f) return null; if(f.status==="accepted") return "friends"; return f.requester===S.uid ? "sent" : "received";
+}
+const myFriends = () => new Set(CM.friends.filter(f=>f.status==="accepted").map(f=>f.requester===S.uid ? f.addressee : f.requester));
+const incoming = () => CM.friends.filter(f=>f.status==="pending" && f.addressee===S.uid);
+
+async function loadCommunity(force){
+  if(!S.uid || CM.loading) return;
+  if(!force && CM.loaded && Date.now()-CM.at < 30000) return;
+  CM.loading = true;
+  const [posts, fr, sv] = await Promise.all([
+    sb.from("posts").select("id,author,body,visibility,card_id,fight_id,created_at").order("created_at",{ascending:false}).limit(150),
+    sb.from("friendships").select("requester,addressee,status,created_at"),
+    sb.from("post_saves").select("post_id").eq("user_id", S.uid)
+  ]);
+  if(posts.error){
+    CM.loading=false; CM.loaded=true; CM.error = /does not exist|schema cache/i.test(posts.error.message||"") ? "setup" : "load";
+    if(S.tab==="community") render(); return;
+  }
+  CM.error = null;
+  CM.posts = posts.data || [];
+  CM.friends = fr.data || [];
+  CM.saves = new Set((sv.data||[]).map(r=>r.post_id));
+  const ids = CM.posts.map(p=>p.id);
+  CM.likes = new Map(); CM.comments = new Map();
+  if(ids.length){
+    const [lk, cm] = await Promise.all([
+      sb.from("post_likes").select("post_id,user_id").in("post_id", ids),
+      sb.from("post_comments").select("id,post_id,author,body,created_at").in("post_id", ids).order("created_at")
+    ]);
+    (lk.data||[]).forEach(r=>{ if(!CM.likes.has(r.post_id)) CM.likes.set(r.post_id,new Set()); CM.likes.get(r.post_id).add(r.user_id); });
+    (cm.data||[]).forEach(r=>{ if(!CM.comments.has(r.post_id)) CM.comments.set(r.post_id,[]); CM.comments.get(r.post_id).push(r); });
+  }
+  CM.loading=false; CM.loaded=true; CM.at=Date.now();
+  if(S.tab==="community") render();
+}
+setInterval(()=>{ if(S.tab==="community" && !document.hidden && !CM.page && !document.activeElement?.closest?.("#app textarea,#app input")) loadCommunity(true); }, 60000);
+
+function communityHTML(){
+  loadCommunity();
+  const req = incoming().length;
+  let h = `<div class="cmhead"><h2>Community</h2><button class="frbtn" data-act="fr-open" aria-label="Friends${req?`, ${req} new request${req===1?"":"s"}`:""}">${friendsSVG}<span>Friends</span>${req?`<i class="badge">${req}</i>`:""}</button></div>`;
+  if(CM.page==="friends") return friendsHTML();
+  if(!CM.loaded) return h + `<p class="note">Loading posts…</p>`;
+  if(CM.error==="setup") return h + emptyHTML("Community is almost ready","The league's database needs one setup step before posts can go up.");
+  if(CM.error) return h + emptyHTML("Couldn't load posts","Check your connection and open this tab again.");
+  h += `<div class="seg boardseg cmseg" role="group" aria-label="Feed">
+    <button data-act="cm-view" data-v="all" aria-pressed="${CM.view==="all"}">Everyone</button>
+    <button data-act="cm-view" data-v="friends" aria-pressed="${CM.view==="friends"}">Friends</button>
+    <button data-act="cm-view" data-v="saved" aria-pressed="${CM.view==="saved"}">Saved</button></div>`;
+  h += composerHTML();
+  const fr = myFriends();
+  const list = CM.posts.filter(p => CM.view==="saved" ? CM.saves.has(p.id) : CM.view==="friends" ? (fr.has(p.author) || p.author===S.uid) : true);
+  if(!list.length){
+    h += CM.view==="saved" ? emptyHTML("Nothing saved yet","Tap the bookmark on a post to keep it here.")
+       : CM.view==="friends" ? emptyHTML(fr.size ? "No posts from friends yet" : "No friends yet", fr.size ? "When your friends post, it shows up here." : "Tap Friends at the top to add people from the league.")
+       : emptyHTML("No posts yet","Be the first. Talk some trash about this weekend's card.");
+    return h;
+  }
+  return h + `<div class="feed">${list.map(postHTML).join("")}</div>`;
+}
+function composerHTML(){
+  const c = currentCard(), live = c ? (c.fights||[]).filter(f=>!isOff(f)) : [];
+  return `<div class="composer">
+    <textarea id="cm-body" maxlength="1000" rows="2" placeholder="What's your take on the card?"></textarea>
+    <div class="cmrow">
+      <div class="cmvis" role="group" aria-label="Who sees this">
+        <button data-act="cm-vis" data-v="public" aria-pressed="${CM.vis==="public"}">Everyone</button>
+        <button data-act="cm-vis" data-v="friends" aria-pressed="${CM.vis==="friends"}">Friends</button>
+      </div>
+      ${live.length?(()=>{ const t = live.find(f=>f.id===CM.tag); const last = n=>String(n).trim().split(/\s+/).pop();
+        return `<label class="cmtag${t?" on":""}"><span>${t?`${esc(last(t.red))} vs ${esc(last(t.blue))} ▾`:"Tag fight ▾"}</span><select id="cm-tagsel" aria-label="Tag a fight"><option value="">No fight</option>${live.map(f=>`<option value="${esc(f.id)}" ${f.id===CM.tag?"selected":""}>${esc(f.red)} vs ${esc(f.blue)}</option>`).join("")}</select></label>`; })():""}
+      <button class="btn gold sm cmpost" data-act="cm-post" ${CM.busy?"disabled":""}>Post</button>
+    </div>
+  </div>`;
+}
+// the fight a post is tagged with: a mini scorebug, plus what the author picked once picks are locked
+function taggedFightHTML(p){
+  const c = S.cards.find(x=>x.id===p.card_id), f = c && (c.fights||[]).find(x=>x.id===p.fight_id);
+  if(!f) return "";
+  const pick = pickOf(p.author, c.id, f.id), show = pick && (cardLocked(c) || p.author===S.uid);
+  const res = f.res && f.res.w;
+  const side = s => `<span class="tfn ${s}${res===s?" won":""}${show&&pick===s?" picked":""}">${esc(s==="red"?f.red:f.blue)}</span>`;
+  const status = res==="cancelled" ? "Cancelled" : res==="draw" ? "Draw / NC" : res ? `${esc(res==="red"?f.red:f.blue)} won` : (c.date ? fmtDate(c.date).replace(/,\s*\d{4}$/,"") : "");
+  return `<div class="tfight">${side("red")}<span class="tvs">VS</span>${side("blue")}<span class="tmeta">${show?`${esc(nameOf(p.author))} picked ${esc(pick==="red"?f.red:f.blue)} · `:""}${status}</span></div>`;
+}
+function postHTML(p){
+  const likes = CM.likes.get(p.id) || new Set(), liked = likes.has(S.uid), saved = CM.saves.has(p.id);
+  const comments = CM.comments.get(p.id) || [], open = CM.open.has(p.id);
+  const canDel = p.author===S.uid || S.uid===COMMISH;
+  let h = `<article class="post" data-pid="${p.id}">
+    <header class="phd"><button class="namelink pwho" data-act="player" data-uid="${esc(p.author)}">${avatar(p.author)}<span class="pname">${commish(p.author)}${nameHTML(p.author)}</span></button>
+      <span class="ptime">${p.visibility==="friends"?`<span class="pvis" title="Friends only">${friendsSVG}</span>`:""}${esc(ago(p.created_at))}</span>
+      ${canDel?`<button class="pmore" data-act="cm-del" data-id="${p.id}" aria-label="Delete post">${dotsSVG}</button>`:""}</header>
+    <p class="pbody">${esc(p.body)}</p>
+    ${p.fight_id?taggedFightHTML(p):""}
+    <div class="pacts">
+      <button class="pact like${liked?" on":""}" data-act="cm-like" data-id="${p.id}" aria-pressed="${liked}" aria-label="Like">${heartSVG(liked)}<span>${likes.size||""}</span></button>
+      <button class="pact" data-act="cm-comments" data-id="${p.id}" aria-expanded="${open}" aria-label="Comments">${bubbleSVG}<span>${comments.length||""}</span></button>
+      <button class="pact save${saved?" on":""}" data-act="cm-save" data-id="${p.id}" aria-pressed="${saved}" aria-label="Save">${saveSVG(saved)}</button>
+    </div>`;
+  if(open){
+    h += `<div class="cmts">${comments.map(cm=>`<div class="cmt">${avatar(cm.author)}<div class="cmtb"><span class="cmtn"><button class="namelink" data-act="player" data-uid="${esc(cm.author)}">${nameHTML(cm.author)}</button> <span class="ptime">${esc(ago(cm.created_at))}</span></span><span class="cmtt">${esc(cm.body)}</span></div>${cm.author===S.uid||S.uid===COMMISH?`<button class="cmtdel" data-act="cm-cdel" data-id="${cm.id}" data-pid="${p.id}" aria-label="Delete comment">×</button>`:""}</div>`).join("")}
+      <div class="cmtnew"><input id="cmt-${p.id}" maxlength="500" placeholder="Add a comment" autocomplete="off"><button class="btn sm gold" data-act="cm-cmt" data-id="${p.id}">Send</button></div></div>`;
+  }
+  return h + `</article>`;
+}
+function friendsHTML(){
+  const ids = Object.keys(S.profiles).filter(id=>id!==S.uid);
+  const q = CM.search.trim().toLowerCase();
+  const row = (id, btns) => `<div class="frrow"><button class="namelink pwho" data-act="player" data-uid="${esc(id)}">${avatar(id)}<span class="pname">${nameHTML(id)}</span></button><span class="frbtns">${btns}</span></div>`;
+  const inc = incoming().map(f=>f.requester), fr = [...myFriends()];
+  let h = `<button class="backbtn" data-act="fr-close">‹ Community</button><div class="event-head"><h2>Friends</h2></div>`;
+  if(inc.length) h += `<div class="psec"><span>Requests</span><span>${inc.length}</span></div><div class="frlist">${inc.map(id=>row(id,`<button class="btn sm gold" data-act="fr-accept" data-uid="${esc(id)}">Accept</button><button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Decline</button>`)).join("")}</div>`;
+  h += `<div class="psec"><span>Your friends</span><span>${fr.length}</span></div>`;
+  h += fr.length ? `<div class="frlist">${fr.sort((a,b)=>nameOf(a).localeCompare(nameOf(b))).map(id=>row(id,`<button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Remove</button>`)).join("")}</div>` : `<p class="note">No friends yet. Add people from the league below.</p>`;
+  h += `<div class="psec"><span>Add friends</span></div><input id="fr-search" class="frsearch" placeholder="Search the league" autocomplete="off" value="${esc(CM.search)}">`;
+  const others = ids.filter(id=>!fr.includes(id) && !inc.includes(id) && (!q || nameOf(id).toLowerCase().includes(q))).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
+  h += `<div class="frlist">${others.map(id=>{ const st = friendState(id);
+    return row(id, st==="sent" ? `<button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Requested ✓</button>` : `<button class="btn sm gold" data-act="fr-add" data-uid="${esc(id)}">Add</button>`); }).join("") || `<p class="note">No one matches that name.</p>`}</div>`;
+  return h;
+}
+async function communityAct(act, b){
+  const id = b.dataset.id ? Number(b.dataset.id) : null, uid = b.dataset.uid;
+  if(act==="fr-open"){ CM.page="friends"; render(); window.scrollTo(0,0); return; }
+  if(act==="fr-close"){ CM.page=null; render(); window.scrollTo(0,0); return; }
+  if(act==="cm-view"){ CM.view=b.dataset.v; render(); return; }
+  if(act==="cm-vis"){ CM.vis=b.dataset.v; render(); return; }
+  if(act==="cm-comments"){ CM.open.has(id)?CM.open.delete(id):CM.open.add(id); render(); if(CM.open.has(id)) $(`#cmt-${id}`)?.focus(); return; }
+  if(act==="cm-post"){
+    const ta=$("#cm-body"), body=(ta?.value||"").trim(); if(!body){ toast("Write something first."); ta?.focus(); return; }
+    const c=currentCard(), fid=CM.tag && c && (c.fights||[]).some(f=>f.id===CM.tag) ? CM.tag : "";
+    CM.busy=true; render();
+    const { data, error } = await sb.from("posts").insert({ body, visibility:CM.vis, card_id: fid&&c?c.id:null, fight_id: fid||null }).select("id,author,body,visibility,card_id,fight_id,created_at").single();
+    CM.busy=false;
+    if(error){ toast("Couldn't post. Try again."); render(); return; }
+    CM.posts.unshift(data); CM.tag=""; const t=$("#cm-body"); if(t) t.value="";
+    render(); toast(CM.vis==="friends"?"Posted to your friends.":"Posted."); return;
+  }
+  if(act==="cm-del"){
+    if(b.dataset.confirm!=="1"){ b.dataset.confirm="1"; b.classList.add("confirm"); b.innerHTML="Delete?"; setTimeout(()=>{ if(b.isConnected){ b.dataset.confirm=""; b.classList.remove("confirm"); b.innerHTML=dotsSVG; } },3000); return; }
+    const { error } = await sb.from("posts").delete().eq("id", id);
+    if(error){ toast("Couldn't delete that post."); return; }
+    CM.posts = CM.posts.filter(p=>p.id!==id); render(); toast("Post deleted."); return;
+  }
+  if(act==="cm-like"){
+    const set = CM.likes.get(id) || new Set(); CM.likes.set(id,set); const on = !set.has(S.uid);
+    on ? set.add(S.uid) : set.delete(S.uid); render();
+    const { error } = on ? await sb.from("post_likes").insert({ post_id:id }) : await sb.from("post_likes").delete().match({ post_id:id, user_id:S.uid });
+    if(error && !/duplicate/i.test(error.message||"")){ on ? set.delete(S.uid) : set.add(S.uid); render(); toast("Couldn't update that like."); }
+    return;
+  }
+  if(act==="cm-save"){
+    const on = !CM.saves.has(id); on ? CM.saves.add(id) : CM.saves.delete(id); render();
+    const { error } = on ? await sb.from("post_saves").insert({ post_id:id }) : await sb.from("post_saves").delete().match({ post_id:id, user_id:S.uid });
+    if(error && !/duplicate/i.test(error.message||"")){ on ? CM.saves.delete(id) : CM.saves.add(id); render(); toast("Couldn't save that post."); }
+    else toast(on?"Saved.":"Removed from saved.");
+    return;
+  }
+  if(act==="cm-cmt"){
+    const inp=$(`#cmt-${id}`), body=(inp?.value||"").trim(); if(!body) return;
+    const { data, error } = await sb.from("post_comments").insert({ post_id:id, body }).select("id,post_id,author,body,created_at").single();
+    if(error){ toast("Couldn't add your comment."); return; }
+    if(!CM.comments.has(id)) CM.comments.set(id,[]); CM.comments.get(id).push(data);
+    const i2=$(`#cmt-${id}`); if(i2) i2.value=""; render(); return;
+  }
+  if(act==="cm-cdel"){
+    const pid=Number(b.dataset.pid);
+    const { error } = await sb.from("post_comments").delete().eq("id", id);
+    if(error){ toast("Couldn't delete that comment."); return; }
+    CM.comments.set(pid, (CM.comments.get(pid)||[]).filter(c=>c.id!==id)); render(); return;
+  }
+  if(act==="fr-add"){
+    const { error } = await sb.from("friendships").insert({ requester:S.uid, addressee:uid });
+    if(error){ toast(/duplicate|unique/i.test(error.message||"") ? "You two already have a request going." : "Couldn't send that request."); await loadCommunity(true); return; }
+    CM.friends.push({ requester:S.uid, addressee:uid, status:"pending" }); render(); toast(`Friend request sent to ${nameOf(uid)}.`); return;
+  }
+  if(act==="fr-accept"){
+    const { error } = await sb.from("friendships").update({ status:"accepted", accepted_at:new Date().toISOString() }).match({ requester:uid, addressee:S.uid });
+    if(error){ toast("Couldn't accept that request."); return; }
+    const f = CM.friends.find(x=>x.requester===uid && x.addressee===S.uid); if(f) f.status="accepted";
+    render(); toast(`You and ${nameOf(uid)} are friends.`); loadCommunity(true); return;
+  }
+  if(act==="fr-remove"){
+    const { error } = await sb.from("friendships").delete().or(`and(requester.eq.${S.uid},addressee.eq.${uid}),and(requester.eq.${uid},addressee.eq.${S.uid})`);
+    if(error){ toast("Couldn't update that friendship."); return; }
+    CM.friends = CM.friends.filter(x=>!((x.requester===S.uid && x.addressee===uid) || (x.addressee===S.uid && x.requester===uid))); render(); loadCommunity(true); return;
+  }
+}
+
 /* ---------- events ---------- */
 /* ---------- bottom tabs ---------- */
 const NAV_ICONS = {
@@ -1227,13 +1432,22 @@ $("#bn").addEventListener("click", e=>{
     } else { app.style.transition="transform .2s ease-out"; app.style.transform=""; }
   });
 })();
+$("#app").addEventListener("input", e=>{
+  if(e.target.id==="fr-search"){ CM.search=e.target.value; render(); }
+});
+$("#app").addEventListener("keydown", e=>{
+  const m = /^cmt-(\d+)$/.exec(e.target.id||"");
+  if(m && e.key==="Enter"){ e.preventDefault(); communityAct("cm-cmt", { dataset:{ id:m[1] } }); }
+});
 $("#app").addEventListener("change", e=>{
   if(e.target.id==="sel-card"){ S.cardId=e.target.value; render(); }
+  if(e.target.id==="cm-tagsel"){ CM.tag=e.target.value; render(); }
   if(e.target.dataset.pref){ savePref(e.target.dataset.pref, e.target.checked); }
 });
 $("#app").addEventListener("click", e=>{
   const b=e.target.closest("[data-act]"); if(!b || b.disabled) return;
   const act=b.dataset.act;
+  if(act.startsWith("cm-") || act.startsWith("fr-")){ communityAct(act,b); return; }
   if(act==="mode"){ S.authMode=b.dataset.v; render(); return; }
   if(act==="install" && deferredInstall){ deferredInstall.prompt(); deferredInstall.userChoice.finally(()=>{ deferredInstall=null; render(); }); return; }
   if(act==="page"){ openPage(b.dataset.v); return; }
