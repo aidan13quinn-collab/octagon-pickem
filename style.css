@@ -520,3 +520,35 @@ body.has-bn{padding-bottom:calc(96px + max(10px,env(safe-area-inset-bottom,0px))
 .bn-dots{bottom:calc(76px + max(10px,env(safe-area-inset-bottom,0px)))}
 body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px)))}
 .bn button.on{height:66px}
+/* ---------- leaders: scorebug rows ---------- */
+.boardseg{background:#0f1116;border:1px solid var(--line);border-radius:999px;padding:3px}
+.boardseg button{border-radius:999px;padding:8px 10px;font-size:13px;letter-spacing:.12em}
+.boardseg button[aria-pressed="true"]{background:linear-gradient(180deg,#FFD873,#F2A81D);color:#16120a;box-shadow:none}
+.lb{display:flex;flex-direction:column;gap:8px}
+.lbrow,.lbme{appearance:none;font:inherit;color:inherit;border:0;cursor:pointer;text-align:left;width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px 12px 10px 8px;border-radius:12px;background:linear-gradient(90deg,#1a1d24,#14161c)}
+.lboct{width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-family:var(--f-bug);font-weight:700;font-size:15px;background:#2a2e38;color:var(--ink);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);line-height:1}
+.lboct small{font-size:9px;margin-right:1px;opacity:.8}
+.lbrow.g .lboct{background:var(--hot-gold);color:#16120a}
+.lbrow.s .lboct{background:#C7CDD6;color:#16120a}
+.lbrow.b3 .lboct{background:#D98B4A;color:#16120a}
+.lbrow.g{background:linear-gradient(90deg,rgba(255,194,61,.24),rgba(255,194,61,.04));box-shadow:inset 0 0 0 1px rgba(255,194,61,.5)}
+.lbrow.me:not(.g){box-shadow:inset 0 0 0 1px rgba(61,139,255,.55)}
+.lbwho{min-width:0;display:flex;flex-direction:column;gap:3px}
+.lbwho b{font-family:var(--f-bug);font-weight:600;font-size:16px;letter-spacing:.02em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px}
+.lbwho b .commish svg{width:14px;height:14px}
+.lbsub{font-family:var(--f-label);font-weight:600;font-size:12px;letter-spacing:.06em;color:var(--muted);display:flex;align-items:center;min-height:18px}
+.lbsub .belts{margin-left:0;gap:4px}
+.lbsub .belt svg{width:34px;height:17px}
+.lbsub .locktag{font-size:12px}
+.lbrec{font-family:var(--f-bug);font-weight:700;font-size:20px;text-align:right;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.lbrec small{display:block;font-family:var(--f-label);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.06em;margin-top:3px}
+.lblock{font-family:var(--f-bug);font-weight:600;font-size:13px;color:var(--hot-gold);border:1px solid rgba(255,194,61,.45);border-radius:8px;padding:5px 7px;display:flex;align-items:center;gap:4px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.lblock svg{width:11px;height:11px}
+.lbrow.unranked{opacity:.6}
+.lbdiv{margin:10px 0 0;font-family:var(--f-label);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+/* your row, pinned just above the tab bar while the list scrolls */
+.lbme{position:sticky;bottom:calc(84px + max(10px,env(safe-area-inset-bottom,0px)));z-index:5;margin-top:10px;background:linear-gradient(90deg,#1d3d82,#14244a);box-shadow:0 0 0 1px #2f6fe0,0 -6px 18px rgba(0,0,0,.45)}
+.lbme .lboct{background:var(--hot-blue);color:#fff}
+.lbme b{font-family:var(--f-bug);font-weight:600;font-size:16px;text-transform:uppercase}
+.lbme .lbrec{font-size:18px}
+.lbme .lbrec small{display:inline;margin-left:4px}

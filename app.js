@@ -761,26 +761,34 @@ function weekStandings(c){ return cached("week:"+c.id, ()=>{
   return rows;
 }); }
 // the table both views share; tied players (same record and same lock record) share a place: T-2, T-2, then 4
+// leaderboard rows as little scorebugs: rank octagon, name (+ belts / this week's lock), record, lock box.
+// Tied players share a place (T-2, T-2, then 4). Your own row is repeated in a bar pinned above the tabs.
 function boardTable(rows, showLock, allTime){
-  let h = `<div class="boardwrap"><table class="board"><thead><tr><th></th><th>Player</th><th>Record</th><th>Locks</th></tr></thead><tbody>`;
   const same = (a,b) => !!a && !!b && a.w===b.w && a.l===b.l && a.lw===b.lw && a.ll===b.ll && a.ranked===b.ranked && !!a.champ===!!b.champ;
-  let place = 0;
+  let place = 0, h = `<div class="lb">`, mine = null;
   rows.forEach((r,i)=>{
     const unranked = allTime && !r.ranked;
     if(unranked && (i===0 || rows[i-1].ranked)){
       const need = Math.max(1, minCards()), total = scoredCards().length;
-      h += `<tr class="divider"><td colspan="4">Not ranked yet · play ${need} of ${total} ${total===1?"card":"cards"} to qualify</td></tr>`;
+      h += `<p class="lbdiv">Not ranked yet · play ${need} of ${total} ${total===1?"card":"cards"} to qualify</p>`;
     }
     if(!same(rows[i-1], r)) place = r.champ ? 1 : i+1;
     const tied = r.champ ? rows.filter(x=>x.champ).length>1 : (same(rows[i-1], r) || same(rows[i+1], r));
-    const rk = unranked ? "–" : tied ? `<span class="t">T-</span>${place}` : place;
-    const sub = allTime ? `<span class="pct">${fmtPct(r)}</span>` : "";
-    const under = allTime ? `<span class="cardsplayed">${r.cards} ${r.cards===1?"card":"cards"}${crown(r.id)}</span>` : showLock ? lockTag(r.id,true) : "";
-    h += `<tr class="${!unranked&&place===1&&(r.w>0||r.champ)?"top":""}${unranked?" unranked":""}"><td class="rk">${rk}</td>
-      <td class="nm"><button class="namebtn" data-act="player" data-uid="${esc(r.id)}">${avatar(r.id)}<span class="nmstack"><span class="nmline"><span class="nmtxt">${commish(r.id)}${nameHTML(r.id, allTime ? undefined : !!r.champ)}${r.id===S.uid?" (you)":""}</span></span>${under}</span><span class="chev" aria-hidden="true">›</span></button></td>
-      <td class="tot">${r.w}–${r.l}${sub}</td><td class="lockrec">${r.lw}–${r.ll}</td></tr>`;
+    const counted = r.w+r.l>0 || r.champ;
+    const tier = unranked || !counted ? "" : place===1 ? "g" : place===2 ? "s" : place===3 ? "b3" : "";
+    const rk = unranked ? "–" : `${tied?'<small>T</small>':""}${place}`;
+    const gold = allTime ? undefined : !!r.champ;
+    const under = allTime ? `<span class="lbsub">${crown(r.id) || `${r.cards} ${r.cards===1?"card":"cards"}`}</span>` : (showLock ? `<span class="lbsub">${lockTag(r.id,true)}</span>` : "");
+    const row = `<span class="lboct">${rk}</span>
+      <span class="lbwho"><b>${commish(r.id)}${nameHTML(r.id, gold)}</b>${under}</span>
+      <span class="lbrec">${r.w}–${r.l}${allTime?`<small>${fmtPct(r)}</small>`:""}</span>
+      <span class="lblock">${lockSVG}${r.lw}–${r.ll}</span>`;
+    h += `<button class="lbrow ${tier}${unranked?" unranked":""}${r.id===S.uid?" me":""}" data-act="player" data-uid="${esc(r.id)}">${row}</button>`;
+    if(r.id===S.uid) mine = { rk, rec:`${r.w}–${r.l}`, pct: allTime ? fmtPct(r) : "", lock:`${r.lw}–${r.ll}` };
   });
-  return h + `</tbody></table></div>`;
+  h += `</div>`;
+  if(mine) h += `<button class="lbme" data-act="player" data-uid="${esc(S.uid)}"><span class="lboct">${mine.rk}</span><b>You</b><span class="lbrec">${mine.rec}${mine.pct?` <small>${mine.pct}</small>`:""}</span><span class="lblock">${lockSVG}${mine.lock}</span></button>`;
+  return h;
 }
 function boardHTML(){
   if(S.viewUser) return playerHTML(S.viewUser);
