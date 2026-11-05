@@ -595,7 +595,7 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .cardsw{white-space:nowrap;flex:none}
 
 /* build stamp: must match BUILD in app.js */
-:root{--fw-build:"2026-11-05c"}
+:root{--fw-build:"2026-11-06a"}
 /* ---------- community ---------- */
 .cmhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .cmhead h2{margin:0;font-family:var(--f-bug);font-weight:700;font-size:26px;text-transform:uppercase}
@@ -652,3 +652,55 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .frbtns{display:flex;gap:6px;flex:none}
 .frsearch{width:100%;font-size:16px;border-radius:12px;padding:10px 14px;background:#0f1116;border:1px solid var(--line);color:var(--ink)}
 .cmtag.on{border-style:solid;background:rgba(255,194,61,.12)}
+/* ---------- profile customizing ---------- */
+.phero{position:relative}
+.phero[style*="--pacc"]{background:radial-gradient(120% 90% at 100% 0%,color-mix(in srgb,var(--pacc) 55%,transparent),transparent 60%),linear-gradient(180deg,#15161b,#111318)}
+.pedit{position:absolute;top:14px;right:max(16px,env(safe-area-inset-right,0px));appearance:none;font-family:var(--f-label);font-weight:700;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#ECEEF3;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:5px 12px;background:rgba(0,0,0,.25);cursor:pointer}
+.pnick{font-family:var(--f-label);font-weight:700;font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--hot-gold)}
+.phmeta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.phmeta .flag{margin:0}
+.phfav{font-size:13px;color:var(--muted)}
+.phfav b{color:var(--ink);font-weight:600}
+.editsheet{align-items:flex-end;padding:0}
+.esheet{width:100%;max-width:520px;background:#171a21;border-top:1px solid #2C303A;border-radius:22px 22px 0 0;padding:12px 16px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px;box-shadow:0 -10px 30px rgba(0,0,0,.5);color:var(--ink)}
+.grab{width:40px;height:5px;border-radius:3px;background:#3a3f4a;margin:0 auto}
+.eshead{display:flex;justify-content:space-between;align-items:center}
+.eshead h3{margin:0;font-family:var(--f-bug);font-weight:700;font-size:20px;text-transform:uppercase}
+.esx{appearance:none;border:0;background:none;color:var(--muted);font-size:28px;line-height:1;cursor:pointer}
+.fld{display:flex;flex-direction:column;gap:6px}
+.esheet input,.esheet select{font-size:16px;background:#0f1116;border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink)}
+.swatches{display:flex;gap:10px;flex-wrap:wrap}
+.sw{appearance:none;width:34px;height:34px;border-radius:50%;border:2px solid transparent;box-shadow:inset 0 0 0 2px rgba(0,0,0,.3);cursor:pointer;padding:0}
+.sw.on{border-color:#fff}
+.sw.none{background:#2a2e38;color:var(--muted);font-size:14px}
+/* ---------- settings tab ---------- */
+.setme{appearance:none;width:100%;display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;border:1px solid #2C303A;background:linear-gradient(90deg,#1a1d24,#14161c);color:var(--ink);cursor:pointer;text-align:left}
+.setme .avatar{width:48px;height:48px;font-size:20px}
+.setmet{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.setmet b{font-family:var(--f-bug);font-weight:600;font-size:18px;text-transform:uppercase;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.setmet b .flag{margin:0}
+.setmet small{font-size:13px;color:var(--muted)}
+.setedit{font-family:var(--f-label);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--hot-gold);white-space:nowrap}
+.sgroup{background:#15171d;border:1px solid #2C303A;border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.sgh{margin:0;padding:12px 14px 4px;font-family:var(--f-bug);font-weight:700;font-size:16px;letter-spacing:.04em;text-transform:uppercase}
+.ssub{padding:12px 14px 2px;font-family:var(--f-label);font-weight:700;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.srowx{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;font-size:14px;color:var(--ink);flex-wrap:wrap}
+.srowx > span:first-child{min-width:0;flex:1}
+.sbtns{display:flex;gap:6px}
+.sval{color:var(--muted);font-size:14px;overflow-wrap:anywhere}
+.sgroup .toggles{border-top:0}
+.sgroup .toggle{padding-inline:14px}
+.snote{margin:0;padding:6px 14px 12px;font-size:12px;color:var(--muted)}
+.sform{display:flex;flex-direction:column;gap:6px;padding:10px 14px}
+.sform input{font-size:16px;background:#0f1116;border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--ink);min-width:0}
+.sinline{display:flex;gap:8px}
+.sinline input{flex:1}
+.sdet{border-top:1px solid rgba(255,255,255,.06)}
+.sdet summary{padding:12px 14px;cursor:pointer;font-family:var(--f-label);font-weight:700;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);list-style:none}
+.sdet summary::-webkit-details-marker{display:none}
+.sdet summary::after{content:" ›";color:var(--muted)}
+.sdet[open] summary::after{content:" ⌄"}
+.sgroup .srow{border-top:1px solid rgba(255,255,255,.06)}
+.sgroup .srow:first-child{border-top:0}
+.srow.danger{color:var(--hot-red)}
+.srow.danger svg{color:var(--hot-red)}

@@ -4,7 +4,7 @@
 // The site's files are uploaded one at a time, so a phone can briefly end up with this app.js next to an
 // older style.css (or keep an old copy cached). style.css carries the same build stamp; if they don't match,
 // fetch fresh copies of both and reload once.
-const BUILD = "2026-11-05c";
+const BUILD = "2026-11-06a";
 (function selfHeal(){
   try{
     const css = getComputedStyle(document.documentElement).getPropertyValue("--fw-build").replace(/["'\s]/g,"");
@@ -57,7 +57,12 @@ function isOff(f){ return !!(f.res && f.res.w === "cancelled"); }
 function fightLocked(c,f){ return cardLocked(c) || !!(f.res && f.res.w); }
 function nameOf(id){ return S.profiles[id]?.display_name || "Player"; }
 function colorFor(id){ let h=0; for(const ch of String(id)) h=(h*31+ch.charCodeAt(0))>>>0; return `hsl(${h%360} 55% 42%)`; }
-function avatar(id){ const n=nameOf(id); return `<span class="avatar" style="background:${colorFor(id)}" aria-hidden="true">${esc(n.trim().charAt(0).toUpperCase()||"?")}</span>`; }
+// profile colors a player can pick (Settings › Edit profile)
+const ACCENTS = { red:"#E5384A", blue:"#3D7BEA", gold:"#D9A12E", green:"#22B96E", purple:"#7C4DDB", cyan:"#1AAFC9" };
+const accentOf = id => ACCENTS[S.profiles[id]?.accent] || null;
+function avatar(id){ const n=nameOf(id); return `<span class="avatar" style="background:${accentOf(id)||colorFor(id)}" aria-hidden="true">${esc(n.trim().charAt(0).toUpperCase()||"?")}</span>`; }
+// a country flag from a code like "us" or "gb-eng"
+function flagImg(code, cls){ return code && /^[a-z]{2}(-[a-z]{3})?$/.test(code) ? `<img class="${cls||"flag"}" src="https://flagcdn.com/${code}.svg" alt="" loading="lazy" width="20" height="14">` : ""; }
 
 // pick lookups (indexed, so the page stays fast with hundreds of players)
 const pk = (u,c,f) => u+"|"+c+"|"+f;
@@ -155,7 +160,7 @@ function notePickTime(rows){ for(const r of rows){ const t = Date.parse(r.update
 async function loadAll(){
   const [cards, profiles, picks, locks, fighters] = await Promise.all([
     sb.from("cards").select("*").order("date",{ascending:false}),
-    fetchAll(()=>sb.from("profiles").select("id,display_name,created_at").order("id")),
+    fetchAll(()=>sb.from("profiles").select("*").order("id")),
     fetchAll(()=>sb.from("picks").select("user_id,card_id,fight_id,side,updated_at").order("user_id").order("card_id").order("fight_id")),
     fetchAll(()=>sb.from("locks").select("user_id,card_id,fight_id").order("user_id").order("card_id")),
     fetchAll(()=>sb.from("fighters").select("name,record,recent,country,photo_url,photo_credit,photo_page").order("name"))
@@ -216,7 +221,7 @@ function applyChange(table, p){
     const r = del ? o : n;
     if(del) S.lockMap.delete(lk(r.user_id, r.card_id)); else putLock(n);
   } else if(table === "profiles"){
-    if(del) delete S.profiles[o.id]; else S.profiles[n.id] = { id:n.id, display_name:n.display_name, created_at:n.created_at };
+    if(del) delete S.profiles[o.id]; else S.profiles[n.id] = { ...(S.profiles[n.id]||{}), ...n };
   } else if(table === "fighters"){
     if(del) delete S.fighters[o.name]; else S.fighters[n.name] = { name:n.name, record:n.record, recent:n.recent, country:n.country, photo_url:n.photo_url, photo_credit:n.photo_credit, photo_page:n.photo_page };
   }
@@ -333,17 +338,8 @@ function tabHTML(){
   if(S.tab==="profile") return playerHTML(S.uid, true);
   if(S.tab==="community") return communityHTML();
   if(S.tab==="board") return boardHTML();
-  if(S.tab==="settings") return S.page ? pageHTML() : settingsMenuHTML();
+  if(S.tab==="settings") return S.page==="app" ? pageHTML() : settingsTabHTML();
   return picksHTML();
-}
-// settings tab: the old menu as a list; each row opens its page inside this tab
-function settingsMenuHTML(){
-  const row = (attr, icon, label) => `<button class="srow" ${attr}>${icon}<span>${label}</span><span class="chev" aria-hidden="true">›</span></button>`;
-  return `<div class="event-head"><h2>Settings</h2></div><div class="slist">
-    ${row('data-act="page" data-v="account"', NAV_ICONS.profile, "Account")}
-    ${row('data-act="page" data-v="settings"', NAV_ICONS.bell, "Theme &amp; notifications")}
-    ${row('data-act="page" data-v="app"', NAV_ICONS.phone, "Get the app")}
-  </div><div class="slist">${row('data-act="signout"', NAV_ICONS.out, "Sign out")}</div>`;
 }
 // switching tabs: each tab remembers where you were scrolled to
 const tabScroll = {};
@@ -352,12 +348,13 @@ function setTab(t, keepScroll){
   tabScroll[S.tab] = window.scrollY;
   if(t!==S.tab){ S.viewUser=null; S.page=null; }
   S.tab=t; try{ localStorage.setItem("op-tab",t); }catch(err){}
+  if(t==="settings"){ loadPrefs(); syncPush(); }
   render();
   window.scrollTo(0, keepScroll===false ? 0 : (tabScroll[t]||0));
 }
 function openPage(p){
-  S.tab="settings"; S.page=p; S.viewUser=null; render(); window.scrollTo(0,0);
-  if(p==="settings"){ loadPrefs(); syncPush(); }
+  S.tab="settings"; S.page = p==="app" ? "app" : null; S.viewUser=null; render(); window.scrollTo(0,0);
+  if(p!=="app"){ loadPrefs(); syncPush(); }
 }
 async function signOut(){
   // stop this device getting the old account's notifications
@@ -410,12 +407,12 @@ async function saveSub(sub){
 }
 // on sign-in and when Settings opens: is this device subscribed, and does the server know?
 async function syncPush(){
-  if(!S.uid || !pushSupported() || Notification.permission!=="granted"){ S.push.subscribed=false; if(S.page==="settings") render(); return; }
+  if(!S.uid || !pushSupported() || Notification.permission!=="granted"){ S.push.subscribed=false; if(S.tab==="settings") render(); return; }
   const reg = await swReady();
   const sub = reg && await reg.pushManager.getSubscription();
   S.push.subscribed = !!sub;
   if(sub) await saveSub(sub);
-  if(S.page==="settings") render();
+  if(S.tab==="settings") render();
 }
 async function pushOn(){
   if(S.push.busy) return;
@@ -452,15 +449,20 @@ async function pushTest(){
   else if(!data.sent) toast("No devices got it. Turn notifications off and on again.");
   else toast("Test sent. It should pop up in a few seconds.");
 }
-const defaultPrefs = () => ({ fight_cancelled:true, fight_added:true, friday_reminder:true, card_results:true });
+const defaultPrefs = () => ({ fight_cancelled:true, fight_added:true, friday_reminder:true, card_results:true, friend_requests:true, post_comments:true, post_likes:true });
+const SOCIAL_PREFS = ["friend_requests","post_comments","post_likes"];
 async function loadPrefs(){
   if(!S.uid) return;
-  const { data } = await sb.from("notify_prefs").select("fight_cancelled,fight_added,friday_reminder,card_results").eq("user_id",S.uid).maybeSingle();
-  S.prefs = data || defaultPrefs();
-  if(S.page==="settings") render();
+  const { data } = await sb.from("notify_prefs").select("*").eq("user_id",S.uid).maybeSingle();
+  S.prefs = { ...defaultPrefs(), ...(data||{}) }; delete S.prefs.user_id; delete S.prefs.updated_at;
+  if(S.tab==="settings") render();
 }
 async function savePrefs(p){
-  const { error } = await sb.from("notify_prefs").upsert({ user_id:S.uid, ...p, updated_at:new Date().toISOString() });
+  let { error } = await sb.from("notify_prefs").upsert({ user_id:S.uid, ...p, updated_at:new Date().toISOString() });
+  if(error && /column/i.test(error.message||"")){ // Community alert settings not set up in the database yet
+    const q = { ...p }; SOCIAL_PREFS.forEach(k=>delete q[k]);
+    ({ error } = await sb.from("notify_prefs").upsert({ user_id:S.uid, ...q, updated_at:new Date().toISOString() }));
+  }
   return !error;
 }
 async function savePref(key, on){
@@ -483,6 +485,51 @@ async function saveName(){
   S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), display_name:name }; bump();
   input.value=""; render(); toast("Username updated.");
 }
+
+/* ---------- edit profile: nickname, color, flag, favorite fighter ---------- */
+const FLAGS = [["us","United States"],["ca","Canada"],["mx","Mexico"],["br","Brazil"],["gb-eng","England"],["gb-sct","Scotland"],["gb-wls","Wales"],["ie","Ireland"],["au","Australia"],["nz","New Zealand"],["de","Germany"],["fr","France"],["es","Spain"],["it","Italy"],["pt","Portugal"],["nl","Netherlands"],["pl","Poland"],["se","Sweden"],["ru","Russia"],["ua","Ukraine"],["ge","Georgia"],["am","Armenia"],["kz","Kazakhstan"],["kg","Kyrgyzstan"],["uz","Uzbekistan"],["tr","Turkey"],["il","Israel"],["lb","Lebanon"],["ng","Nigeria"],["cm","Cameroon"],["za","South Africa"],["cn","China"],["jp","Japan"],["kr","South Korea"],["ph","Philippines"],["in","India"],["ar","Argentina"],["co","Colombia"],["pe","Peru"],["ve","Venezuela"],["cu","Cuba"],["do","Dominican Republic"],["pr","Puerto Rico"],["jm","Jamaica"]];
+function editProfileHTML(){
+  const me = S.profiles[S.uid] || {};
+  const fighters = Object.keys(S.fighters).sort();
+  return `<div class="sharesheet editsheet" role="dialog" aria-label="Edit profile"><form class="esheet" id="prof-form" autocomplete="off" novalidate>
+    <span class="grab" aria-hidden="true"></span>
+    <div class="eshead"><h3>Edit profile</h3><button type="button" class="esx" data-ed="close" aria-label="Close">×</button></div>
+    <div class="fld"><label class="label" for="pf-nick">Nickname</label><input id="pf-nick" maxlength="24" placeholder="The Oracle" value="${esc(me.nickname||"")}"></div>
+    <div class="fld"><span class="label">Color</span><div class="swatches" role="radiogroup" aria-label="Profile color">
+      ${Object.entries(ACCENTS).map(([k,v])=>`<button type="button" class="sw${(me.accent||"")===k?" on":""}" data-ed="accent" data-v="${k}" role="radio" aria-checked="${(me.accent||"")===k}" aria-label="${k}" style="background:${v}"></button>`).join("")}
+      <button type="button" class="sw none${me.accent?"":" on"}" data-ed="accent" data-v="" role="radio" aria-checked="${!me.accent}" aria-label="No color">∅</button></div></div>
+    <div class="fld"><label class="label" for="pf-flag">Flag</label><select id="pf-flag"><option value="">No flag</option>${FLAGS.map(([c,n])=>`<option value="${c}" ${me.flag===c?"selected":""}>${esc(n)}</option>`).join("")}</select></div>
+    <div class="fld"><label class="label" for="pf-fav">Favorite fighter</label><input id="pf-fav" maxlength="60" list="pf-fighters" placeholder="Anyone on a card" value="${esc(me.fav_fighter||"")}"><datalist id="pf-fighters">${fighters.map(n=>`<option value="${esc(n)}">`).join("")}</datalist></div>
+    <p class="err" id="pf-err" hidden></p>
+    <button class="btn gold" type="submit" id="pf-save">Save</button>
+  </form></div>`;
+}
+function openEditProfile(){
+  document.querySelector(".editsheet")?.remove();
+  document.body.insertAdjacentHTML("beforeend", editProfileHTML());
+  const el = document.querySelector(".editsheet"); let accent = S.profiles[S.uid]?.accent || "";
+  const close = ()=>{ el.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e=>{ if(e.key==="Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  el.addEventListener("click", e=>{
+    if(e.target===el) return close();
+    const b = e.target.closest("[data-ed]"); if(!b) return;
+    if(b.dataset.ed==="close") close();
+    if(b.dataset.ed==="accent"){ accent=b.dataset.v; el.querySelectorAll(".sw").forEach(x=>{ const on=x.dataset.v===accent; x.classList.toggle("on",on); x.setAttribute("aria-checked",String(on)); }); }
+  });
+  el.querySelector("form").addEventListener("submit", async e=>{
+    e.preventDefault();
+    const err=el.querySelector("#pf-err"), btn=el.querySelector("#pf-save"); err.hidden=true;
+    const row = { nickname: el.querySelector("#pf-nick").value.trim() || null, accent: accent || null,
+      flag: el.querySelector("#pf-flag").value || null, fav_fighter: el.querySelector("#pf-fav").value.trim() || null };
+    btn.disabled=true;
+    const { error } = await sb.from("profiles").update(row).eq("id", S.uid);
+    btn.disabled=false;
+    if(error){ err.textContent = /column/i.test(error.message||"") ? "Profile customizing needs one setup step in the league's database first." : "Couldn't save your profile. Try again."; err.hidden=false; return; }
+    S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), ...row }; bump(); close(); render(); toast("Profile updated.");
+  });
+  setTimeout(()=>el.querySelector("#pf-nick")?.focus(), 50);
+}
 async function savePassword(){
   const p1=$("#acc-pass").value, p2=$("#acc-pass2").value, err=$("#pass-err"), btn=$("#pass-save");
   err.hidden=true;
@@ -496,7 +543,7 @@ async function savePassword(){
 }
 
 /* ---------- pages ---------- */
-const pageTitles = { account:"Account", settings:"Theme & notifications", app:"Get the app" };
+const pageTitles = { app:"Get the app" };
 function pageHTML(){
   let h = `<button class="backbtn" data-act="closepage">‹ Back</button><div class="event-head"><h2>${esc(pageTitles[S.page]||"")}</h2></div>`;
   if(S.page==="account") h += accountHTML();
@@ -565,8 +612,55 @@ function settingsHTML(){
   <p class="note" style="margin:0">These choices apply to every device where you turn notifications on.</p></div>`;
   return h;
 }
+// Settings tab: one scrolling page of grouped sections
+function settingsTabHTML(){
+  const me = S.profiles[S.uid] || {}, email = S.session?.user?.email || "", t = currentTheme();
+  const nick = me.nickname ? `"${esc(me.nickname)}"` : "Add a nickname, color and flag";
+  let h = `<div class="cmhead"><h2>Settings</h2></div>
+  <button class="setme" data-act="editprofile">${avatar(S.uid)}<span class="setmet"><b>${commish(S.uid)}${nameHTML(S.uid)}${flagImg(me.flag)}</b><small>${nick}</small></span><span class="setedit">Edit profile</span></button>`;
+  // notifications
+  h += `<section class="sgroup"><h3 class="sgh">Notifications</h3>`;
+  if(!pushSupported()){
+    h += isIOS() && !isStandalone()
+      ? `<div class="srowx"><span>On iPhone, notifications only work in the Fight Week app. Add it to your Home Screen, open it from there, then turn them on here.</span></div><button class="srow" data-act="page" data-v="app">${NAV_ICONS.phone}<span>How to get the app</span><span class="chev" aria-hidden="true">›</span></button>`
+      : `<div class="srowx"><span>This browser can't show notifications. Try Chrome or Safari, or install the app.</span></div>`;
+  } else if(Notification.permission==="denied"){
+    h += `<div class="srowx"><span>Notifications are blocked for Fight Week on this device. Allow them in your ${isIOS()?"iPhone Settings › Notifications › Fight Week":"browser's site settings"}, then come back here.</span></div>`;
+  } else if(S.push.subscribed){
+    h += `<div class="srowx"><span class="pushstate on"><span class="dot" aria-hidden="true"></span>On for this device</span><span class="sbtns"><button class="btn ghost sm" data-act="push-test">Test</button><button class="btn ghost sm" data-act="push-off" ${S.push.busy?"disabled":""}>Turn off</button></span></div>`;
+  } else {
+    h += `<div class="srowx"><span>Get alerts for card changes, lock reminders, results, and your Community activity.</span><button class="btn gold sm" data-act="push-on" ${S.push.busy?"disabled":""}>${S.push.busy?"Turning on…":"Turn on"}</button></div>`;
+  }
+  h += `<div class="ssub">The card</div><div class="toggles">
+    ${toggleRow("fight_cancelled","A fight gets cancelled","When a bout on the upcoming card is called off.")}
+    ${toggleRow("fight_added","A fight gets added","When a new bout is added to the upcoming card.")}
+    ${toggleRow("friday_reminder","Friday reminder","Fridays at 5 PM ET: what time picks lock tomorrow.")}
+    ${toggleRow("card_results","Card results","When the last fight ends: your record and where you placed.")}
+  </div><div class="ssub">Community</div><div class="toggles">
+    ${toggleRow("friend_requests","Friend requests","When someone adds you, or accepts your request.")}
+    ${toggleRow("post_comments","Comments","When someone comments on your post.")}
+    ${toggleRow("post_likes","Likes","When someone likes your post. At most once an hour per post.")}
+  </div><p class="snote">These apply on every device where notifications are on.</p></section>`;
+  // appearance
+  h += `<section class="sgroup"><h3 class="sgh">Appearance</h3><div class="srowx"><span>Theme</span>
+    <div class="cmvis" role="group" aria-label="Theme"><button data-act="theme" data-v="light" aria-pressed="${t==="light"}">Light</button><button data-act="theme" data-v="dark" aria-pressed="${t==="dark"}">Dark</button></div></div></section>`;
+  // account
+  h += `<section class="sgroup"><h3 class="sgh">Account</h3>
+    <form class="sform" id="name-form" autocomplete="off" novalidate><label class="label" for="acc-name">Username</label><div class="sinline"><input id="acc-name" maxlength="30" placeholder="${esc(nameOf(S.uid))}" autocapitalize="words"><button class="btn sm gold" type="submit" id="name-save">Save</button></div><p class="err" id="name-err" hidden></p></form>
+    <div class="srowx"><span class="label">Email</span><span class="sval">${esc(email)}</span></div>
+    <details class="sdet"><summary>Change password</summary>
+      <form class="sform" id="pass-form" method="post" action="#" novalidate>
+        <input type="email" name="email" autocomplete="username" value="${esc(email)}" hidden>
+        <label class="label" for="acc-pass">New password</label><input id="acc-pass" type="password" autocomplete="new-password" minlength="6">
+        <label class="label" for="acc-pass2">Type it again</label><input id="acc-pass2" type="password" autocomplete="new-password" minlength="6">
+        <p class="err" id="pass-err" hidden></p><div><button class="btn sm gold" type="submit" id="pass-save">Change password</button></div>
+      </form></details></section>`;
+  h += `<section class="sgroup"><button class="srow" data-act="page" data-v="app">${NAV_ICONS.phone}<span>Get the app</span><span class="chev" aria-hidden="true">›</span></button>
+    <button class="srow danger" data-act="signout">${NAV_ICONS.out}<span>Sign out</span></button></section>`;
+  return h;
+}
 function appHTML(){
-  if(isStandalone()) return `<div class="panel"><h3>You're all set</h3><p class="note" style="margin:0">You're using the Fight Week app right now. Turn on notifications in Settings so you don't miss a card change.</p><div><button class="btn gold" data-act="page" data-v="settings">Go to Settings</button></div></div>`;
+  if(isStandalone()) return `<div class="panel"><h3>You're all set</h3><p class="note" style="margin:0">You're using the Fight Week app right now. Turn on notifications in Settings so you don't miss a card change.</p><div><button class="btn gold" data-act="closepage">Back to Settings</button></div></div>`;
   const ios = `<div class="panel steps"><h3>iPhone</h3><ol>
       <li>Open <b>${esc(location.host)}</b> in <b>Safari</b>.</li>
       <li>Tap the <b>Share</b> button <span class="shareico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg></span> at the bottom of the screen.</li>
@@ -949,10 +1043,12 @@ function playerHTML(uid, asTab){
   const pl = placeIn(rows, uid, true), champ = champs().has(uid);
   const joined = S.profiles[uid]?.created_at ? new Date(S.profiles[uid].created_at).toLocaleDateString(undefined,{month:"short",year:"numeric"}) : "";
   const metaBits = [champ?"Champ":"", pl?`${pl.tied?"T-":""}${ordinal(pl.place)} of ${pl.of}`:"Not ranked yet", joined?`Since ${joined}`:""].filter(Boolean);
+  const P = S.profiles[uid] || {}, acc = accentOf(uid);
   // fighter card header
   let h = `${asTab?"":`<button class="backbtn" data-act="back">‹ Leaders</button>`}
-  <section class="phero${champ?" champ":""}">
-    <div class="phtop">${avatar(uid)}<div class="phid"><h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2><div class="phmeta">${metaBits.map(esc).join(" · ")}</div>${lockTag(uid)}</div></div>
+  <section class="phero${champ?" champ":""}"${acc&&!champ?` style="--pacc:${acc}"`:""}>
+    ${me?`<button class="pedit" data-act="editprofile">Edit</button>`:""}
+    <div class="phtop">${avatar(uid)}<div class="phid">${P.nickname?`<div class="pnick">"${esc(P.nickname)}"</div>`:""}<h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2><div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}${lockTag(uid)}</div></div>
     <div class="tape"><div><b>${r.w}–${r.l}</b><span>Record</span></div><div><b>${r.w+r.l?fmtPct(r):"–"}</b><span>Win %</span></div><div class="tl"><b>${r.lw}–${r.ll}</b><span>Locks</span></div><div><b>${r.cards||0}</b><span>Cards</span></div></div>
   </section>`;
   // belt case
@@ -1451,6 +1547,7 @@ $("#app").addEventListener("click", e=>{
   if(act==="mode"){ S.authMode=b.dataset.v; render(); return; }
   if(act==="install" && deferredInstall){ deferredInstall.prompt(); deferredInstall.userChoice.finally(()=>{ deferredInstall=null; render(); }); return; }
   if(act==="page"){ openPage(b.dataset.v); return; }
+  if(act==="editprofile"){ openEditProfile(); return; }
   if(act==="closepage"){ S.page=null; render(); window.scrollTo(0,0); return; }
   if(act==="theme"){ setTheme(b.dataset.v); return; }
   if(act==="bview"){ S.boardView=b.dataset.v; try{ localStorage.setItem("op-board",S.boardView); }catch(err){} render(); return; }
