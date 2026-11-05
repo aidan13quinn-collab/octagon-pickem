@@ -903,12 +903,65 @@ function cardRecord(uid, c){
   (c.fights||[]).forEach(f=>{ const g=grade(pickOf(uid,c.id,f.id),f,owes(uid,c)); if(g===1) w++; else if(g===0) l++; });
   return {w,l};
 }
+// a player's place on a sorted list of rows (tied players share it); null when not ranked
+function placeIn(rows, uid, allTime){
+  const i = rows.findIndex(r=>r.id===uid); if(i<0) return null;
+  const r = rows[i]; if(allTime && !r.ranked) return null;
+  const same = (a,b)=>a.w===b.w && a.l===b.l && a.lw===b.lw && a.ll===b.ll && !!a.champ===!!b.champ && a.ranked===b.ranked;
+  if(r.champ) return { place:1, tied: rows.filter(x=>x.champ).length>1, of: rows.length };
+  const first = rows.findIndex(x=>same(x,r));
+  return { place:first+1, tied: rows.filter(x=>same(x,r)).length>1, of: rows.length };
+}
+const ordinal = n => { const v=n%100; return n+(v>=11&&v<=13?"th":["th","st","nd","rd"][n%10]||"th"); };
+// every belt a player has won, newest first: [{m:"gold"|"silver", c:card}]
+function beltList(uid){ return gradedCards().flatMap(c=>{ const P=cardPodium(c); return P.ids.has(uid) ? [{m:"gold",c}] : P.silver.has(uid) ? [{m:"silver",c}] : []; }); }
+// correct picks on underdogs (plus odds), biggest first
+function upsetsOf(uid){
+  const hits=[]; let dogs=0;
+  for(const c of S.cards) for(const f of (c.fights||[])){
+    const side = pickOf(uid,c.id,f.id), r = f.res && f.res.w; if(!side || (r!=="red" && r!=="blue")) continue;
+    const o = side==="red" ? f.oddsRed : f.oddsBlue; if(o==null || Number(o)<=0) continue;
+    dogs++; if(r===side) hits.push({ o:Number(o), win: side==="red"?f.red:f.blue, over: side==="red"?f.blue:f.red, c });
+  }
+  return { hits: hits.sort((a,b)=>b.o-a.o), dogs };
+}
+const cardShort = c => cardNumber(c) ? `UFC ${cardNumber(c)}` : (c.date ? fmtDate(c.date).replace(/,\s*\d{4}$/,"") : "Fight Night");
+const mainEvent = c => { const n=String(c.name||""), i=n.indexOf(":"); return i>0 ? n.slice(i+1).trim() : ""; };
 function playerHTML(uid, asTab){
   const me = uid===S.uid;
-  const r = standings().find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0};
+  const rows = standings();
+  const r = rows.find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0,cards:0};
+  const pl = placeIn(rows, uid, true), champ = champs().has(uid);
+  const joined = S.profiles[uid]?.created_at ? new Date(S.profiles[uid].created_at).toLocaleDateString(undefined,{month:"short",year:"numeric"}) : "";
+  const metaBits = [champ?"Champ":"", pl?`${pl.tied?"T-":""}${ordinal(pl.place)} of ${pl.of}`:"Not ranked yet", joined?`Since ${joined}`:""].filter(Boolean);
+  // fighter card header
   let h = `${asTab?"":`<button class="backbtn" data-act="back">‹ Leaders</button>`}
-    <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${commish(uid)}${nameHTML(uid)}${crown(uid)}${me?" (you)":""}</h2>
-      <div class="pstats"><span><b class="nw">${r.w}–${r.l}</b> picks${r.w+r.l?` (${fmtPct(r)})`:""}</span><span class="lk-stat"><b class="nw">${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
+  <section class="phero${champ?" champ":""}">
+    <div class="phtop">${avatar(uid)}<div class="phid"><h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2><div class="phmeta">${metaBits.map(esc).join(" · ")}</div>${lockTag(uid)}</div></div>
+    <div class="tape"><div><b>${r.w}–${r.l}</b><span>Record</span></div><div><b>${r.w+r.l?fmtPct(r):"–"}</b><span>Win %</span></div><div class="tl"><b>${r.lw}–${r.ll}</b><span>Locks</span></div><div><b>${r.cards||0}</b><span>Cards</span></div></div>
+  </section>`;
+  // belt case
+  const belts = beltList(uid);
+  if(belts.length){
+    h += `<div class="psec"><span>Belts</span><span>${belts.length}</span></div><div class="beltcase">${belts.map(b=>`<div class="bcase ${b.m}"><span class="belt ${b.m}${cardNumber(b.c)?" num":""}">${beltSVG(b.m, cardNumber(b.c)||"FN")}</span><b>${esc(cardNumber(b.c)?`UFC ${cardNumber(b.c)}`:"Fight Night")}</b><small>${esc([mainEvent(b.c), b.m==="silver"?"Silver":"", b.c.date?fmtDate(b.c.date).replace(/,\s*\d{4}$/,""):""].filter(Boolean).join(" · "))}</small></div>`).join("")}</div>`;
+  }
+  // biggest upsets
+  const U = upsetsOf(uid);
+  if(U.dogs){
+    h += `<div class="psec"><span>Biggest upsets</span><span>${U.hits.length} of ${U.dogs} underdog${U.dogs===1?"":"s"} hit</span></div>`;
+    h += U.hits.length ? `<div class="ups">${U.hits.slice(0,3).map(x=>`<div class="up"><span class="uodds">${esc(fmtOdds(x.o))}</span><span class="uwho"><b>${esc(x.win)}</b><small>over ${esc(x.over)}</small></span><span class="ucard">${esc(cardShort(x.c))}</span></div>`).join("")}</div>` : `<p class="note">No underdog picks have hit yet.</p>`;
+  }
+  // recent cards: record and where they finished
+  const recent = scoredCards().slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,4);
+  if(recent.length){
+    h += `<div class="psec"><span>Recent cards</span></div><div class="pform">${recent.map(x=>{
+      if(!played(uid,x)) return `<span class="skip"><b>–</b><small>${esc(cardShort(x))}</small><small class="pl">Skipped</small></span>`;
+      const cr = cardRecord(uid,x), wp = placeIn(weekStandings(x), uid, false), done = (x.fights||[]).every(f=>f.res && f.res.w);
+      const won = done && cardPodium(x).ids.has(uid);
+      return `<span class="${won?"win":""}"><b>${cr.w}–${cr.l}</b><small>${esc(cardShort(x))}</small>${wp&&done?`<small class="pl">${wp.tied?"T-":""}${ordinal(wp.place)}</small>`:""}</span>`;
+    }).join("")}</div>`;
+  }
+  h += `<div class="psec"><span>Picks by card</span></div>`;
   const c = currentCard();
   if(!c) return h + emptyHTML("No cards yet","Their picks will show up here once a card is posted.");
 
@@ -923,7 +976,7 @@ function playerHTML(uid, asTab){
     }).join("")}</div>`;
   }
 
-  h += `<div class="cardpick"><div class="event-head"><h2>${esc(c.name)}</h2>${c.date?`<span class="label">${esc(fmtDate(c.date))}</span>`:""}</div>${cardSelect()}</div>`;
+  h += `<div class="pline"><span>${esc(c.name)}</span>${S.cards.length>1?`<label class="cardsw">Card ▾${cardSelect()}</label>`:""}</div>`;
   const fights = c.fights||[];
   const L = lockInfo(uid,c);
   const cr = cardRecord(uid,c);
