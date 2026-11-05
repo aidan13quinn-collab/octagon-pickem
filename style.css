@@ -509,3 +509,14 @@ header.band::after{background:linear-gradient(90deg,#101218 10%,transparent 45%,
 .you{font-family:var(--f-label);font-weight:700;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--hot-blue);padding:1px 5px;border-radius:3px}
 .cp.r .you{background:var(--hot-red)}
 .crowd .who{font-size:13px}
+/* nothing may stick out sideways (that's what let the page zoom out past full size) */
+html,body{overflow-x:hidden}
+@supports (overflow:clip){ html,body{overflow-x:clip} }
+/* fit each phone: use exactly the notch / home-bar space the phone reports, no extra on top */
+header.band{padding-top:max(10px,calc(env(safe-area-inset-top,0px) + 4px))}
+@media (display-mode: standalone){ header.band{padding-top:max(10px,calc(env(safe-area-inset-top,0px) + 2px))} }
+.bn{height:calc(68px + max(10px,env(safe-area-inset-bottom,0px)));padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
+body.has-bn{padding-bottom:calc(96px + max(10px,env(safe-area-inset-bottom,0px)))}
+.bn-dots{bottom:calc(76px + max(10px,env(safe-area-inset-bottom,0px)))}
+body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px)))}
+.bn button.on{height:66px}

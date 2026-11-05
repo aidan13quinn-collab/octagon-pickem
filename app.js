@@ -1114,7 +1114,9 @@ $("#bn").addEventListener("click", e=>{
   const blocked = el => !!el.closest("input,textarea,select,.sharesheet,#bn,[data-noswipe]") || scrollsSideways(el);
   const idx = () => TABS.indexOf(S.tab);
   document.addEventListener("touchstart", e=>{
-    if(!S.uid || e.touches.length!==1 || blocked(e.target)){ mode="off"; return; }
+    // pinched in: let the finger pan around the zoomed page instead of switching tabs
+    const zoomed = window.visualViewport && window.visualViewport.scale > 1.01;
+    if(!S.uid || zoomed || e.touches.length!==1 || blocked(e.target)){ mode="off"; return; }
     const t=e.touches[0]; x0=t.clientX; y0=t.clientY; t0=Date.now(); dx=0;
     mode = (x0 < 22 || x0 > window.innerWidth-22) ? "off" : null;
   }, {passive:true});
