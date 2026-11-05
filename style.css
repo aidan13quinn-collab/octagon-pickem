@@ -593,3 +593,6 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .pform small.pl{color:var(--ink);opacity:.8}
 .pform .win small.pl{color:var(--hot-gold);opacity:1}
 .cardsw{white-space:nowrap;flex:none}
+
+/* build stamp: must match BUILD in app.js */
+:root{--fw-build:"2026-11-05b"}

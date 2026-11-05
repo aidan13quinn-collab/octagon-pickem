@@ -1,6 +1,23 @@
 (() => {
 "use strict";
 
+// The site's files are uploaded one at a time, so a phone can briefly end up with this app.js next to an
+// older style.css (or keep an old copy cached). style.css carries the same build stamp; if they don't match,
+// fetch fresh copies of both and reload once.
+const BUILD = "2026-11-05b";
+(function selfHeal(){
+  try{
+    const css = getComputedStyle(document.documentElement).getPropertyValue("--fw-build").replace(/["'\s]/g,"");
+    if(css === BUILD) return;
+    const last = Number(sessionStorage.getItem("fw-heal")||0);
+    if(Date.now() - last < 60000) return;            // tried a minute ago: don't loop
+    sessionStorage.setItem("fw-heal", String(Date.now()));
+    const fresh = ["/style.css","/app.js","/index.html","/"].map(u=>fetch(u,{cache:"reload"}).catch(()=>{}));
+    const clear = window.caches ? caches.keys().then(ks=>Promise.all(ks.map(k=>caches.delete(k)))).catch(()=>{}) : Promise.resolve();
+    Promise.all([...fresh, clear]).finally(()=>location.reload());
+  }catch(e){}
+})();
+
 const sb = window.supabase.createClient(window.OP_CONFIG.supabaseUrl, window.OP_CONFIG.supabaseAnonKey, {
   auth: { persistSession: true, autoRefreshToken: true }
 });
