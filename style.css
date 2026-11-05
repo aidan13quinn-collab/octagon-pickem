@@ -595,7 +595,7 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .cardsw{white-space:nowrap;flex:none}
 
 /* build stamp: must match BUILD in app.js */
-:root{--fw-build:"2026-11-06c"}
+:root{--fw-build:"2026-11-06d"}
 /* ---------- community ---------- */
 .cmhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .cmhead h2{margin:0;font-family:var(--f-bug);font-weight:700;font-size:26px;text-transform:uppercase}
@@ -722,3 +722,16 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .phero:has(.pedit) .phtop{padding-right:58px}
 .frsearchf{max-width:none}
 .fat{font-family:var(--f-bug);font-weight:600;font-size:16px;letter-spacing:.02em}
+/* ---------- get-the-app nudge ---------- */
+.me{display:flex;align-items:center;gap:10px}
+.getapp{appearance:none;font-family:var(--f-label);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--hot-gold);background:rgba(255,194,61,.08);border:1px solid rgba(255,194,61,.45);border-radius:999px;padding:5px 11px;cursor:pointer;white-space:nowrap}
+.ihead{display:flex;gap:12px;align-items:center}
+.ihead img{border-radius:12px;flex:none}
+.ihead h3{margin:0;font-family:var(--f-bug);font-weight:700;font-size:19px;text-transform:uppercase;line-height:1.1}
+.ihead p{margin:4px 0 0;color:var(--muted);font-size:14px}
+.iperks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:15px;color:var(--muted)}
+.iperks li::before{content:"✓ ";color:var(--hot-gold);font-weight:700}
+.iperks b{color:var(--ink);font-weight:600}
+.isteps{margin:0;padding:12px 12px 12px 30px;background:#0f1116;border:1px solid #2C303A;border-radius:12px;display:flex;flex-direction:column;gap:6px;font-size:15px}
+.isteps .shareico svg{width:16px;height:16px;vertical-align:-3px;fill:none;stroke:var(--hot-blue);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ibtns{display:flex;flex-direction:column;gap:8px}

@@ -4,7 +4,7 @@
 // The site's files are uploaded one at a time, so a phone can briefly end up with this app.js next to an
 // older style.css (or keep an old copy cached). style.css carries the same build stamp; if they don't match,
 // fetch fresh copies of both and reload once.
-const BUILD = "2026-11-06c";
+const BUILD = "2026-11-06d";
 (function selfHeal(){
   try{
     const css = getComputedStyle(document.documentElement).getPropertyValue("--fw-build").replace(/["'\s]/g,"");
@@ -190,7 +190,7 @@ async function loadAll(){
   S.lockMap = new Map(); (locks.data||[]).forEach(putLock);
   S.fighters = Object.fromEntries((fighters.data||[]).map(f=>[f.name,f]));
   S.loaded = true; lastRefresh = Date.now(); bump();
-  render();
+  render(); maybeNudgeInstall();
 }
 
 // other players' picks: fetch only what changed since last time (every minute while the page is open)
@@ -293,7 +293,7 @@ function render(){
   const signedIn = !!S.uid;
   $("#me").hidden = !signedIn; $("#bn").hidden = !signedIn; document.body.classList.toggle("has-bn", signedIn);
   if(signedIn){
-    $("#me").innerHTML = `<button class="meav" data-go="profile" aria-label="Your profile">${avatar(S.uid)}</button>`;
+    $("#me").innerHTML = `${inPhoneBrowser()?`<button class="getapp" data-go="app">Get the app</button>`:""}<button class="meav" data-go="profile" aria-label="Your profile">${avatar(S.uid)}</button>`;
     document.querySelectorAll("#bn button").forEach(t=>{ const on = t.dataset.tab===S.tab; t.classList.toggle("on", on); t.setAttribute("aria-selected", String(on)); });
     document.querySelectorAll("#bn-dots i").forEach((d,i)=>d.classList.toggle("on", TABS[i]===S.tab));
   }
@@ -385,12 +385,10 @@ async function signOut(){
 }
 
 /* ---------- theme ---------- */
-function currentTheme(){ return document.documentElement.dataset.theme==="dark" ? "dark" : "light"; }
-function setTheme(t){
-  document.documentElement.dataset.theme=t;
-  try{ localStorage.setItem("fw-theme",t); }catch(e){}
-  render();
-}
+// dark only for now (light mode comes back later)
+document.documentElement.dataset.theme="dark";
+function currentTheme(){ return "dark"; }
+function setTheme(){ }
 
 /* ---------- install as an app ---------- */
 let deferredInstall = null;
@@ -400,6 +398,47 @@ const isAndroid = () => /android/i.test(navigator.userAgent);
 window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferredInstall = e; render(); });
 window.addEventListener("appinstalled", ()=>{ deferredInstall = null; render(); toast("Fight Week is on your home screen."); });
 if("serviceWorker" in navigator){ window.addEventListener("load", ()=>{ navigator.serviceWorker.register("/sw.js").catch(()=>{}); }); }
+
+// gentle "get the app" nudge for people who open the link in a phone browser:
+// a bottom sheet a few seconds after they're in, at most 3 times, at least 4 days apart, never once installed.
+// A small "Get the app" button stays in the header the whole time they're in the browser.
+const inPhoneBrowser = () => !isStandalone() && (isIOS() || isAndroid());
+const iosNotSafari = () => isIOS() && /crios|fxios|edgios|opios|gsa\//i.test(navigator.userAgent);
+function installSheetHTML(){
+  const ios = isIOS();
+  const steps = ios
+    ? (iosNotSafari()
+        ? `<ol class="isteps"><li>Copy this page's link and open it in <b>Safari</b>.</li><li>Tap <b>Share</b> <span class="shareico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg></span>, then <b>Add to Home Screen</b>.</li></ol>`
+        : `<ol class="isteps"><li>Tap <b>Share</b> <span class="shareico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg></span> at the bottom of Safari.</li><li>Scroll down, tap <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>Open Fight Week from your Home Screen.</li></ol>`)
+    : (deferredInstall ? "" : `<ol class="isteps"><li>Tap the <b>⋮</b> menu in Chrome.</li><li>Tap <b>Install app</b> (or <b>Add to Home screen</b>).</li></ol>`);
+  return `<div class="sharesheet editsheet installsheet" role="dialog" aria-label="Get the Fight Week app"><div class="esheet">
+    <span class="grab" aria-hidden="true"></span>
+    <div class="ihead"><img src="/icons/icon-192.png" alt="" width="52" height="52"><div><h3>Fight Week is better as an app</h3><p>Free, takes 10 seconds, no app store.</p></div></div>
+    <ul class="iperks"><li><b>Full screen</b>, no browser bars</li><li><b>Notifications</b> when the card changes and results come in${ios?" (iPhone only allows these in the app)":""}</li><li><b>One tap</b> from your home screen</li></ul>
+    ${steps}
+    <div class="ibtns">${!ios && deferredInstall ? `<button class="btn gold" data-in="install">Install Fight Week</button>` : ""}<button class="btn ghost" data-in="later">Not now</button></div>
+  </div></div>`;
+}
+function openInstallSheet(){
+  if(document.querySelector(".installsheet")) return;
+  document.body.insertAdjacentHTML("beforeend", installSheetHTML());
+  const el = document.querySelector(".installsheet");
+  const close = ()=>el.remove();
+  el.addEventListener("click", e=>{
+    if(e.target===el) return close();
+    const b=e.target.closest("[data-in]"); if(!b) return;
+    if(b.dataset.in==="later") close();
+    if(b.dataset.in==="install" && deferredInstall){ deferredInstall.prompt(); deferredInstall.userChoice.finally(()=>{ deferredInstall=null; close(); render(); }); }
+  });
+}
+function maybeNudgeInstall(){
+  if(!inPhoneBrowser() || !S.uid || !S.loaded) return;
+  let st = { n:0, last:0 }; try{ st = JSON.parse(localStorage.getItem("fw-install")||"null") || st; }catch(e){}
+  if(st.n >= 3 || Date.now() - st.last < 4*86400000) return;
+  setTimeout(()=>{ if(!inPhoneBrowser() || document.querySelector(".sharesheet")) return;
+    try{ localStorage.setItem("fw-install", JSON.stringify({ n: st.n+1, last: Date.now() })); }catch(e){}
+    openInstallSheet(); }, 4000);
+}
 
 /* ---------- notifications ---------- */
 const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
@@ -664,9 +703,6 @@ function settingsTabHTML(){
     ${toggleRow("post_comments","Comments","When someone comments on your post.")}
     ${toggleRow("post_likes","Likes","When someone likes your post. At most once an hour per post.")}
   </div><p class="snote">These apply on every device where notifications are on.</p></section>`;
-  // appearance
-  h += `<section class="sgroup"><h3 class="sgh">Appearance</h3><div class="srowx"><span>Theme</span>
-    <div class="cmvis" role="group" aria-label="Theme"><button data-act="theme" data-v="light" aria-pressed="${t==="light"}">Light</button><button data-act="theme" data-v="dark" aria-pressed="${t==="dark"}">Dark</button></div></div></section>`;
   // account
   h += `<section class="sgroup"><h3 class="sgh">Account</h3>
     <form class="sform" id="name-form" autocomplete="off" novalidate><label class="label" for="acc-name">Username</label><div class="sinline"><input id="acc-name" maxlength="30" placeholder="${esc(nameOf(S.uid))}" autocapitalize="words"><button class="btn sm gold" type="submit" id="name-save">Save</button></div><p class="err" id="name-err" hidden></p></form>
@@ -1519,7 +1555,7 @@ const TAB_LABELS = { profile:"Profile", community:"Community", picks:"Picks", bo
   $("#bn").innerHTML = TABS.map(t=>`<button role="tab" data-tab="${t}" aria-label="${TAB_LABELS[t]}" aria-selected="false">${NAV_ICONS[t]}<span>${TAB_LABELS[t]}</span></button>`).join("");
   $("#bn-dots").innerHTML = TABS.map(()=>"<i></i>").join("");
 })();
-$("#me").addEventListener("click", e=>{ if(e.target.closest("[data-go]")) setTab("profile", false); });
+$("#me").addEventListener("click", e=>{ const g=e.target.closest("[data-go]"); if(!g) return; if(g.dataset.go==="app") openInstallSheet(); else setTab("profile", false); });
 $("#bn").addEventListener("click", e=>{
   const t=e.target.closest("button[data-tab]"); if(!t) return;
   if(t.dataset.tab===S.tab){ S.viewUser=null; S.page=null; render(); window.scrollTo({top:0,behavior:"smooth"}); return; } // tap the tab you're on: back to its top
