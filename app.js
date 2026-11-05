@@ -727,10 +727,15 @@ function crowdHTML(c,f){
   const n = red.length+blue.length;
   if(!n) return locked0(c) ? `<div class="crowd"><span class="note">Nobody picked this one.</span></div>` : "";
   const desc = id => `<span><button class="namelink" data-act="player" data-uid="${esc(id)}">${commish(id)}${nameHTML(id)}${crown(id)}</button>${lockRow(id,c.id)?.fight_id===f.id?' <span class="lk">LOCK</span>':""}</span>`;
-  return `<div class="crowd"><span class="label">League picks · <span class="nw">${red.length}–${blue.length}</span></span>
-    <div class="bar" aria-hidden="true"><i style="width:${red.length/n*100}%;background:var(--red)"></i><i style="width:${blue.length/n*100}%;background:var(--blue)"></i></div>
-    <div class="who"><span style="color:var(--red)">${esc(f.red)}:</span>${red.map(desc).join("")||"<span>none</span>"}</div>
-    <div class="who"><span style="color:var(--blue)">${esc(f.blue)}:</span>${blue.map(desc).join("")||"<span>none</span>"}</div></div>`;
+  // percent bar: each side's share at the ends, "YOU" on your side; tap it to see who picked whom
+  const rp = Math.round(red.length/n*100), bp = 100-rp, mine = pickOf(S.uid,c.id,f.id);
+  const key = "crowd|"+c.id+"|"+f.id, open = S.openForm.has(key);
+  const you = `<span class="you">You</span>`;
+  return `<div class="crowd"><button class="crowdbar" data-act="hist" data-key="${esc(key)}" aria-expanded="${open}" aria-label="League picks: ${red.length} ${esc(f.red)}, ${blue.length} ${esc(f.blue)}. Show who picked whom.">
+      <span class="cends"><span class="cp r">${mine==="red"?you:""}${rp}%</span><span class="clab">League picks</span><span class="cp b">${mine==="blue"?you:""}${bp}%</span></span>
+      <span class="cbar" aria-hidden="true">${red.length?`<i style="width:${rp}%;background:var(--hot-red)"></i>`:""}${blue.length?`<i style="flex:1;background:var(--hot-blue)"></i>`:""}</span></button>
+    ${open?`<div class="who"><span style="color:var(--hot-red)">${esc(f.red)} · ${red.length}:</span>${red.map(desc).join("")||"<span>none</span>"}</div>
+    <div class="who"><span style="color:var(--hot-blue)">${esc(f.blue)} · ${blue.length}:</span>${blue.map(desc).join("")||"<span>none</span>"}</div>`:""}</div>`;
 }
 
 // this week's lock for a player, shown under their name

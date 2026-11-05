@@ -498,3 +498,14 @@ header.band::after{background:linear-gradient(90deg,#101218 10%,transparent 45%,
 .fighter.blue .ftag{align-self:flex-end}
 /* the fighter you didn't pick stays visible, just quieter */
 .corners .fighter.out{filter:grayscale(.55) brightness(.82)}
+/* league picks: percent bar (tap for names) */
+.crowdbar{appearance:none;width:100%;background:none;border:0;padding:0;color:inherit;cursor:pointer;display:flex;flex-direction:column;gap:6px;text-align:left}
+.cends{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.cp{font-family:var(--f-bug);font-weight:600;font-size:15px;font-variant-numeric:tabular-nums;display:inline-flex;align-items:center;gap:5px}
+.cp.r{color:#FF7482} .cp.b{color:#86B4FF}
+.clab{font-family:var(--f-label);font-weight:700;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.cbar{height:6px;border-radius:3px;display:flex;gap:2px;overflow:hidden;background:#2a2e38}
+.cbar i{display:block;height:100%}
+.you{font-family:var(--f-label);font-weight:700;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--hot-blue);padding:1px 5px;border-radius:3px}
+.cp.r .you{background:var(--hot-red)}
+.crowd .who{font-size:13px}
