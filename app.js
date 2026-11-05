@@ -253,10 +253,7 @@ function render(){
   const signedIn = !!S.uid;
   $("#me").hidden = !signedIn; $("#bn").hidden = !signedIn; document.body.classList.toggle("has-bn", signedIn);
   if(signedIn){
-    $("#me").innerHTML = `<span class="who-am-i">${avatar(S.uid)}<span id="me-name"></span></span>`;
-    $("#me-name").innerHTML = S.loaded ? nameHTML(S.uid) : esc(nameOf(S.uid));
-    $("#me-name").insertAdjacentHTML("afterbegin", commish(S.uid));
-    if(S.loaded) $("#me-name").insertAdjacentHTML("beforeend", crown(S.uid));
+    $("#me").innerHTML = `<button class="meav" data-go="profile" aria-label="Your profile">${avatar(S.uid)}</button>`;
     document.querySelectorAll("#bn button").forEach(t=>{ const on = t.dataset.tab===S.tab; t.classList.toggle("on", on); t.setAttribute("aria-selected", String(on)); });
     document.querySelectorAll("#bn-dots i").forEach((d,i)=>d.classList.toggle("on", TABS[i]===S.tab));
   }
@@ -574,6 +571,16 @@ function appHTML(){
   return h;
 }
 
+// scorebug names shrink a little when they're long so one word never breaks mid-name
+function bugSize(n){ const w = Math.max(...String(n).split(/\s+/).map(x=>x.length)); return w>12 ? 16 : w>9 ? 19 : 22; }
+// "2d 06h 14m" until picks lock, as three little boxes
+function clockHTML(at){
+  let ms = Math.max(0, Date.parse(at) - Date.now()), m = Math.floor(ms/60000);
+  const d = Math.floor(m/1440), hh = Math.floor((m%1440)/60), mm = m%60, p = n=>String(n).padStart(2,"0");
+  return d ? `<span>${d}<em>D</em></span><span>${p(hh)}<em>H</em></span><span>${p(mm)}<em>M</em></span>`
+           : `<span>${p(hh)}<em>H</em></span><span>${p(mm)}<em>M</em></span><span>${p(Math.floor(ms/1000)%60)}<em>S</em></span>`;
+}
+setInterval(()=>{ document.querySelectorAll(".clock[data-lockat]").forEach(el=>el.innerHTML=clockHTML(el.dataset.lockat)); }, 1000);
 function picksHTML(){
   const c = currentCard();
   if(!c) return emptyHTML("No fight card yet","The next UFC card is added automatically. Check back soon.");
@@ -585,26 +592,32 @@ function picksHTML(){
   fights.forEach(f=>{ const g=grade(pickOf(S.uid,c.id,f.id),f,owes(S.uid,c)); if(g===1) cw++; else if(g===0) cl++; });
   const locked = cardLocked(c);
 
-  let h = `<div class="cardpick"><div class="event-head">
-      <h2>${esc(c.name)}</h2>
-      ${c.date?`<span class="label">${esc(fmtDate(c.date))}</span>`:""}
-      <span class="pill ${locked?"locked":"open"}">${locked?"Picks locked":(c.lock_at?`Picks lock ${esc(fmtLockAt(c))}`:"Picks open")}</span>
-      ${cw+cl?`<span class="pill gold"><span class="nw">${cw}–${cl}</span> this card</span>`:""}
-    </div>${cardSelect()}</div>`;
-
-  if(!locked && live.length){
-    // progress pills: fights picked and this week's lock, with a one-line reminder until both are done
-    const allIn = done===live.length;
-    const nm = L ? String(L.side==="red"?L.f.red:L.f.blue).trim().split(/\s+/).pop() : "";
-    const tip = !L ? "Lock your surest pick. Any missed picks or locks count as wrong." : !allIn ? "Any missed picks count as wrong." : "";
-    h += `<div class="progress"><span class="ppill ${allIn?"ok":""}">${allIn?"✓ ":""}${done}/${live.length} picked</span><span class="ppill lockp ${L?"ok":""}">${lockSVG}${L?`Lock: ${esc(nm)}`:"Lock not set"}</span>${done?`<button class="sharebtn" data-act="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>Share picks</button>`:""}${tip?`<span class="ptip">${tip}</span>`:""}</div>`;
-  } else if(fights.length){
-    const nm = L ? (L.side==="red"?L.f.red:L.f.blue) : "";
-    h += `<div class="lockstrip ${L?"set":""}"><span class="lockicon" aria-hidden="true">${lockSVG}</span>
-      <span class="ls-t">${L?`Lock: ${esc(nm)}`:(locked?"No lock this week":"Lock of the week")}</span>
-      <span class="ls-v">${L?(L.hit===null?"Pending":L.hit==="push"?"Push":L.hit?"Hit":"Missed"):lockMissed(S.uid,c)?"Missed":(locked?"":"Pick a fighter, then lock it")}</span></div>`;
-    if(live.some(f=>pickOf(S.uid,c.id,f.id))) h += `<div class="progress"><button class="sharebtn" data-act="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>Share my picks</button></div>`;
-  }
+  // top of the tab: TV-style scorebug for the main event, countdown, progress ring, a big lock tile and share
+  const shareSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>`;
+  const nm = String(c.name||""), ix = nm.indexOf(":");
+  const kicker = (ix>0 ? nm.slice(0,ix) : nm).trim();
+  const vs = (ix>0 ? nm.slice(ix+1) : "").split(/\s+vs\.?\s+/i).map(x=>x.trim()).filter(Boolean);
+  const main = live[0];
+  const redN = vs.length===2 ? vs[0] : (main ? main.red : ""), blueN = vs.length===2 ? vs[1] : (main ? main.blue : "");
+  const allIn = live.length && done===live.length;
+  const lockNm = L ? String(L.side==="red"?L.f.red:L.f.blue).trim().split(/\s+/).pop() : "";
+  let lockSub, lockCls = L ? "set" : "";
+  if(L){ lockSub = L.hit===null ? (locked?"Pending":"Tap to see it") : L.hit==="push" ? "Push" : L.hit ? "Hit" : "Missed"; if(L.hit===true) lockCls+=" hit"; if(L.hit===false) lockCls+=" miss"; }
+  else if(lockMissed(S.uid,c)){ lockSub="Missed"; lockCls="miss"; }
+  else lockSub = locked ? "No lock this card" : (done ? "Tap a pick below, then lock it" : "Pick fights first, then lock one");
+  const R = 15.5, C = 2*Math.PI*R, frac = live.length ? done/live.length : 0;
+  let h = `<div class="ptop">
+    <div class="pline"><span>${esc(kicker)}${c.date?` · ${esc(fmtDate(c.date).replace(/,\s*\d{4}$/,""))}`:""}</span>${S.cards.length>1?`<label class="cardsw">Card ▾${cardSelect()}</label>`:""}</div>
+    ${redN&&blueN?`<div class="bug"><div><span class="bnm r" style="font-size:${bugSize(redN)}px">${esc(redN)}</span><span class="boct">VS</span><span class="bnm b" style="font-size:${bugSize(blueN)}px">${esc(blueN)}</span></div></div>`:`<h2 class="ptitle">${esc(c.name)}</h2>`}
+    ${!locked && c.lock_at ? `<div class="pline"><span>Picks lock in</span><span class="clock" data-lockat="${esc(c.lock_at)}">${clockHTML(c.lock_at)}</span></div>`
+      : `<div class="pline"><span>${locked?"Picks locked":"Picks open"}</span>${cw+cl?`<span class="crec"><b>${cw}–${cl}</b> this card</span>`:""}</div>`}
+    ${live.length?`<div class="pstat">
+      <div class="ring" role="img" aria-label="${done} of ${live.length} picked"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="${R}" fill="none" stroke="#2a2e38" stroke-width="4"/><circle cx="18" cy="18" r="${R}" fill="none" stroke="${allIn?"var(--good)":"#FFC23D"}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${(C*frac).toFixed(1)} ${C.toFixed(1)}"/></svg><b>${done}/${live.length}</b></div>
+      <button class="biglock ${lockCls}" data-act="golock">${lockSVG}<span><b>${L?`Lock: ${esc(lockNm)}`:"Lock not set"}</b><small>${esc(lockSub)}</small></span></button>
+      ${done?`<button class="sharebig" data-act="share">${shareSVG}<span>Share<br>picks</span></button>`:""}
+    </div>`:""}
+    ${!locked && live.length && (!L || !allIn) ? `<p class="ptip">${!L?"Lock your surest pick. Any missed picks or locks count as wrong.":"Any missed picks count as wrong."}</p>` : ""}
+  </div>`;
   if(!live.length) h += emptyHTML("No bouts on this card","Bouts will appear here once they're announced.");
 
   // cancelled bouts are left off the page (players still get the "fight cancelled" notification)
@@ -614,7 +627,7 @@ function picksHTML(){
     const flocked = fightLocked(c,f);
     const res = f.res && f.res.w ? f.res : null;
     const tag = i===0 ? "Main event" : (i===1 ? "Co-main" : "");
-    h += `<section class="bout${isLock?" is-lock":""}" aria-label="${esc(f.red)} vs ${esc(f.blue)}">
+    h += `<section class="bout${isLock?" is-lock":""}" data-fid="${esc(f.id)}" aria-label="${esc(f.red)} vs ${esc(f.blue)}">
       <div class="bout-meta"><span class="label">${esc(tag?tag+" · ":"")}${esc(f.weight||"Bout")} · ${f.rounds||3} rds</span>
         ${isLock?`<span class="pill gold">Lock of the week</span>`:""}</div>
       <div class="corners">${fighterBtn(c,f,"red",p,flocked,res)}<span class="vs">VS</span>${fighterBtn(c,f,"blue",p,flocked,res)}</div>${photoCredits(f)}`;
@@ -1076,6 +1089,7 @@ const TAB_LABELS = { profile:"Profile", community:"Community", picks:"Picks", bo
   $("#bn").innerHTML = TABS.map(t=>`<button role="tab" data-tab="${t}" aria-label="${TAB_LABELS[t]}" aria-selected="false">${NAV_ICONS[t]}<span>${TAB_LABELS[t]}</span></button>`).join("");
   $("#bn-dots").innerHTML = TABS.map(()=>"<i></i>").join("");
 })();
+$("#me").addEventListener("click", e=>{ if(e.target.closest("[data-go]")) setTab("profile", false); });
 $("#bn").addEventListener("click", e=>{
   const t=e.target.closest("button[data-tab]"); if(!t) return;
   if(t.dataset.tab===S.tab){ S.viewUser=null; S.page=null; render(); window.scrollTo({top:0,behavior:"smooth"}); return; } // tap the tab you're on: back to its top
@@ -1148,6 +1162,7 @@ $("#app").addEventListener("click", e=>{
   if(act==="hist"){ const k=b.dataset.key; S.openForm.has(k)?S.openForm.delete(k):S.openForm.add(k); render(); return; }
   const c=currentCard(); if(!c) return;
   if(act==="share"){ sharePicks(c); return; }
+  if(act==="golock"){ const L=lockInfo(S.uid,c); const f=L ? L.f : (c.fights||[]).find(x=>!isOff(x) && pickOf(S.uid,c.id,x.id)) || (c.fights||[]).find(x=>!isOff(x)); const el=f && document.querySelector(`.bout[data-fid="${CSS.escape(f.id)}"]`); if(el) el.scrollIntoView({behavior:"smooth",block:"center"}); return; }
   const f=(c.fights||[]).find(x=>x.id===b.dataset.fight); if(!f) return;
   if(act==="pick") setPick(c,f,b.dataset.v);
   if(act==="lock") toggleLock(c,f);
