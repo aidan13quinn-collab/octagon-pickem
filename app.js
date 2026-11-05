@@ -4,7 +4,7 @@
 // The site's files are uploaded one at a time, so a phone can briefly end up with this app.js next to an
 // older style.css (or keep an old copy cached). style.css carries the same build stamp; if they don't match,
 // fetch fresh copies of both and reload once.
-const BUILD = "2026-11-06a";
+const BUILD = "2026-11-06b";
 (function selfHeal(){
   try{
     const css = getComputedStyle(document.documentElement).getPropertyValue("--fw-build").replace(/["'\s]/g,"");
@@ -61,6 +61,23 @@ function colorFor(id){ let h=0; for(const ch of String(id)) h=(h*31+ch.charCodeA
 const ACCENTS = { red:"#E5384A", blue:"#3D7BEA", gold:"#D9A12E", green:"#22B96E", purple:"#7C4DDB", cyan:"#1AAFC9" };
 const accentOf = id => ACCENTS[S.profiles[id]?.accent] || null;
 function avatar(id){ const n=nameOf(id); return `<span class="avatar" style="background:${accentOf(id)||colorFor(id)}" aria-hidden="true">${esc(n.trim().charAt(0).toUpperCase()||"?")}</span>`; }
+// @handle (Community username); handles live on profiles once the league's database has the column
+const handleOf = id => S.profiles[id]?.handle || "";
+const atHTML = (id, cls) => handleOf(id) ? `<span class="${cls||"at"}">@${esc(handleOf(id))}</span>` : "";
+const HANDLE_RE = /^[a-z0-9_.]{3,20}$/;
+function handleProblem(h){
+  if(!h) return "Pick an @ to use the feed.";
+  if(h.length<3) return "At least 3 characters.";
+  if(h.length>20) return "20 characters max.";
+  if(!HANDLE_RE.test(h)) return "Letters, numbers, _ and . only.";
+  const taken = Object.values(S.profiles).some(p=>p.id!==S.uid && (p.handle||"").toLowerCase()===h);
+  return taken ? `@${h} is taken.` : "";
+}
+async function saveHandle(h){
+  const { error } = await sb.from("profiles").update({ handle:h }).eq("id", S.uid);
+  if(error) return /duplicate|unique/i.test(error.message||"") || error.code==="23505" ? `@${h} is taken.` : "Couldn't save that. Try again.";
+  S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), handle:h }; bump(); return "";
+}
 // a country flag from a code like "us" or "gb-eng"
 function flagImg(code, cls){ return code && /^[a-z]{2}(-[a-z]{3})?$/.test(code) ? `<img class="${cls||"flag"}" src="https://flagcdn.com/${code}.svg" alt="" loading="lazy" width="20" height="14">` : ""; }
 
@@ -264,10 +281,11 @@ async function toggleLock(c, f){
 /* ---------- render ---------- */
 function preserve(fn){
   const vals={}, active=document.activeElement?.id;
+  let caret=null; try{ const ae=document.activeElement; if(ae && typeof ae.selectionStart==="number") caret=[ae.selectionStart, ae.selectionEnd]; }catch(e){}
   document.querySelectorAll("#app input[id], #app textarea[id], #app select[id]:not(#sel-card):not(#cm-tagsel)").forEach(el=>vals[el.id]=el.value);
   fn();
   for(const [id,v] of Object.entries(vals)){ const el=document.getElementById(id); if(el) el.value=v; }
-  if(active){ const el=document.getElementById(active); if(el) el.focus(); }
+  if(active){ const el=document.getElementById(active); if(el){ el.focus(); try{ if(caret!=null && el.setSelectionRange) el.setSelectionRange(caret[0], caret[1]); }catch(e){} } }
 }
 function emptyHTML(h,p){ return `<div class="empty"><h3>${esc(h)}</h3><p>${esc(p)}</p></div>`; }
 
@@ -494,6 +512,7 @@ function editProfileHTML(){
   return `<div class="sharesheet editsheet" role="dialog" aria-label="Edit profile"><form class="esheet" id="prof-form" autocomplete="off" novalidate>
     <span class="grab" aria-hidden="true"></span>
     <div class="eshead"><h3>Edit profile</h3><button type="button" class="esx" data-ed="close" aria-label="Close">×</button></div>
+    ${"handle" in me ? `<div class="fld"><label class="label" for="pf-handle">Your @</label><label class="hfield sm"><span>@</span><input id="pf-handle" maxlength="20" autocapitalize="none" autocorrect="off" spellcheck="false" value="${esc(me.handle||"")}"></label></div>` : ""}
     <div class="fld"><label class="label" for="pf-nick">Nickname</label><input id="pf-nick" maxlength="24" placeholder="The Oracle" value="${esc(me.nickname||"")}"></div>
     <div class="fld"><span class="label">Color</span><div class="swatches" role="radiogroup" aria-label="Profile color">
       ${Object.entries(ACCENTS).map(([k,v])=>`<button type="button" class="sw${(me.accent||"")===k?" on":""}" data-ed="accent" data-v="${k}" role="radio" aria-checked="${(me.accent||"")===k}" aria-label="${k}" style="background:${v}"></button>`).join("")}
@@ -522,10 +541,14 @@ function openEditProfile(){
     const err=el.querySelector("#pf-err"), btn=el.querySelector("#pf-save"); err.hidden=true;
     const row = { nickname: el.querySelector("#pf-nick").value.trim() || null, accent: accent || null,
       flag: el.querySelector("#pf-flag").value || null, fav_fighter: el.querySelector("#pf-fav").value.trim() || null };
+    const hIn = el.querySelector("#pf-handle");
+    if(hIn){ const h = hIn.value.trim().toLowerCase().replace(/^@/,"");
+      if(h !== (S.profiles[S.uid]?.handle||"")){ const prob = h ? handleProblem(h) : "Your @ can't be blank once you have one.";
+        if(prob){ err.textContent=prob; err.hidden=false; return; } row.handle = h; } }
     btn.disabled=true;
     const { error } = await sb.from("profiles").update(row).eq("id", S.uid);
     btn.disabled=false;
-    if(error){ err.textContent = /column/i.test(error.message||"") ? "Profile customizing needs one setup step in the league's database first." : "Couldn't save your profile. Try again."; err.hidden=false; return; }
+    if(error){ err.textContent = (/duplicate|unique/i.test(error.message||"") || error.code==="23505") ? `@${row.handle} is taken.` : /column/i.test(error.message||"") ? "Profile customizing needs one setup step in the league's database first." : "Couldn't save your profile. Try again."; err.hidden=false; return; }
     S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), ...row }; bump(); close(); render(); toast("Profile updated.");
   });
   setTimeout(()=>el.querySelector("#pf-nick")?.focus(), 50);
@@ -617,7 +640,7 @@ function settingsTabHTML(){
   const me = S.profiles[S.uid] || {}, email = S.session?.user?.email || "", t = currentTheme();
   const nick = me.nickname ? `"${esc(me.nickname)}"` : "Add a nickname, color and flag";
   let h = `<div class="cmhead"><h2>Settings</h2></div>
-  <button class="setme" data-act="editprofile">${avatar(S.uid)}<span class="setmet"><b>${commish(S.uid)}${nameHTML(S.uid)}${flagImg(me.flag)}</b><small>${nick}</small></span><span class="setedit">Edit profile</span></button>`;
+  <button class="setme" data-act="editprofile">${avatar(S.uid)}<span class="setmet"><b>${commish(S.uid)}${nameHTML(S.uid)}${flagImg(me.flag)}</b><small>${handleOf(S.uid)?`@${esc(handleOf(S.uid))} · `:""}${nick}</small></span><span class="setedit">Edit profile</span></button>`;
   // notifications
   h += `<section class="sgroup"><h3 class="sgh">Notifications</h3>`;
   if(!pushSupported()){
@@ -1048,7 +1071,7 @@ function playerHTML(uid, asTab){
   let h = `${asTab?"":`<button class="backbtn" data-act="back">‹ Leaders</button>`}
   <section class="phero${champ?" champ":""}"${acc&&!champ?` style="--pacc:${acc}"`:""}>
     ${me?`<button class="pedit" data-act="editprofile">Edit</button>`:""}
-    <div class="phtop">${avatar(uid)}<div class="phid">${P.nickname?`<div class="pnick">"${esc(P.nickname)}"</div>`:""}<h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2><div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}${lockTag(uid)}</div></div>
+    <div class="phtop">${avatar(uid)}<div class="phid">${P.nickname?`<div class="pnick">"${esc(P.nickname)}"</div>`:""}<h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2>${atHTML(uid,"phat")}<div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}${lockTag(uid)}</div></div>
     <div class="tape"><div><b>${r.w}–${r.l}</b><span>Record</span></div><div><b>${r.w+r.l?fmtPct(r):"–"}</b><span>Win %</span></div><div class="tl"><b>${r.lw}–${r.ll}</b><span>Locks</span></div><div><b>${r.cards||0}</b><span>Cards</span></div></div>
   </section>`;
   // belt case
@@ -1311,6 +1334,9 @@ function communityHTML(){
   loadCommunity();
   const req = incoming().length;
   let h = `<div class="cmhead"><h2>Community</h2><button class="frbtn" data-act="fr-open" aria-label="Friends${req?`, ${req} new request${req===1?"":"s"}`:""}">${friendsSVG}<span>Friends</span>${req?`<i class="badge">${req}</i>`:""}</button></div>`;
+  // the feed needs an @ first (only once the database has handles)
+  const me = S.profiles[S.uid] || {};
+  if("handle" in me && !me.handle) return `<div class="cmhead"><h2>Community</h2></div>` + handleGateHTML();
   if(CM.page==="friends") return friendsHTML();
   if(!CM.loaded) return h + `<p class="note">Loading posts…</p>`;
   if(CM.error==="setup") return h + emptyHTML("Community is almost ready","The league's database needs one setup step before posts can go up.");
@@ -1329,6 +1355,17 @@ function communityHTML(){
     return h;
   }
   return h + `<div class="feed">${list.map(postHTML).join("")}</div>`;
+}
+function handleGateHTML(){
+  const v = (CM.handleDraft ?? "").toLowerCase(), prob = v ? handleProblem(v) : "";
+  return `<form class="hgate" id="handle-form" autocomplete="off" novalidate>
+    <span class="hgico" aria-hidden="true">@</span>
+    <h3>Pick your @</h3>
+    <p>It's how people find you in Community. It shows under your name, and nobody else can have it.</p>
+    <label class="hfield"><span>@</span><input id="hg-handle" maxlength="20" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="${esc(nameOf(S.uid).toLowerCase().replace(/[^a-z0-9_.]/g,"").slice(0,20)||"yourname")}" value="${esc(v)}"></label>
+    <p class="hhint ${prob?"bad":v?"ok":""}" id="hg-hint">${prob ? esc(prob) : v ? `@${esc(v)} is available.` : "3–20 characters: letters, numbers, _ and ."}</p>
+    <button class="btn gold" type="submit" ${!v||prob?"disabled":""}>Claim @${esc(v||"…")}</button>
+  </form>`;
 }
 function composerHTML(){
   const c = currentCard(), live = c ? (c.fights||[]).filter(f=>!isOff(f)) : [];
@@ -1360,7 +1397,7 @@ function postHTML(p){
   const comments = CM.comments.get(p.id) || [], open = CM.open.has(p.id);
   const canDel = p.author===S.uid || S.uid===COMMISH;
   let h = `<article class="post" data-pid="${p.id}">
-    <header class="phd"><button class="namelink pwho" data-act="player" data-uid="${esc(p.author)}">${avatar(p.author)}<span class="pname">${commish(p.author)}${nameHTML(p.author)}</span></button>
+    <header class="phd"><button class="namelink pwho" data-act="player" data-uid="${esc(p.author)}">${avatar(p.author)}<span class="pname">${commish(p.author)}${nameHTML(p.author)}${atHTML(p.author,"pat")}</span></button>
       <span class="ptime">${p.visibility==="friends"?`<span class="pvis" title="Friends only">${friendsSVG}</span>`:""}${esc(ago(p.created_at))}</span>
       ${canDel?`<button class="pmore" data-act="cm-del" data-id="${p.id}" aria-label="Delete post">${dotsSVG}</button>`:""}</header>
     <p class="pbody">${esc(p.body)}</p>
@@ -1379,14 +1416,14 @@ function postHTML(p){
 function friendsHTML(){
   const ids = Object.keys(S.profiles).filter(id=>id!==S.uid);
   const q = CM.search.trim().toLowerCase();
-  const row = (id, btns) => `<div class="frrow"><button class="namelink pwho" data-act="player" data-uid="${esc(id)}">${avatar(id)}<span class="pname">${nameHTML(id)}</span></button><span class="frbtns">${btns}</span></div>`;
+  const row = (id, btns) => `<div class="frrow"><button class="namelink pwho" data-act="player" data-uid="${esc(id)}">${avatar(id)}<span class="pname">${nameHTML(id)}${atHTML(id,"pat")}</span></button><span class="frbtns">${btns}</span></div>`;
   const inc = incoming().map(f=>f.requester), fr = [...myFriends()];
   let h = `<button class="backbtn" data-act="fr-close">‹ Community</button><div class="event-head"><h2>Friends</h2></div>`;
   if(inc.length) h += `<div class="psec"><span>Requests</span><span>${inc.length}</span></div><div class="frlist">${inc.map(id=>row(id,`<button class="btn sm gold" data-act="fr-accept" data-uid="${esc(id)}">Accept</button><button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Decline</button>`)).join("")}</div>`;
   h += `<div class="psec"><span>Your friends</span><span>${fr.length}</span></div>`;
   h += fr.length ? `<div class="frlist">${fr.sort((a,b)=>nameOf(a).localeCompare(nameOf(b))).map(id=>row(id,`<button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Remove</button>`)).join("")}</div>` : `<p class="note">No friends yet. Add people from the league below.</p>`;
   h += `<div class="psec"><span>Add friends</span></div><input id="fr-search" class="frsearch" placeholder="Search the league" autocomplete="off" value="${esc(CM.search)}">`;
-  const others = ids.filter(id=>!fr.includes(id) && !inc.includes(id) && (!q || nameOf(id).toLowerCase().includes(q))).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
+  const others = ids.filter(id=>!fr.includes(id) && !inc.includes(id) && (!q || nameOf(id).toLowerCase().includes(q.replace(/^@/,"")) || handleOf(id).toLowerCase().includes(q.replace(/^@/,"")))).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
   h += `<div class="frlist">${others.map(id=>{ const st = friendState(id);
     return row(id, st==="sent" ? `<button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Requested ✓</button>` : `<button class="btn sm gold" data-act="fr-add" data-uid="${esc(id)}">Add</button>`); }).join("") || `<p class="note">No one matches that name.</p>`}</div>`;
   return h;
@@ -1530,6 +1567,13 @@ $("#bn").addEventListener("click", e=>{
 })();
 $("#app").addEventListener("input", e=>{
   if(e.target.id==="fr-search"){ CM.search=e.target.value; render(); }
+  if(e.target.id==="hg-handle"){
+    const el=e.target, pos=el.selectionStart, v=el.value.toLowerCase().replace(/^@/,"").replace(/\s/g,"");
+    if(v!==el.value){ el.value=v; try{ el.setSelectionRange(Math.min(pos,v.length),Math.min(pos,v.length)); }catch(err){} }
+    CM.handleDraft=v; const prob = v ? handleProblem(v) : "", hint=$("#hg-hint"), btn=$("#handle-form button");
+    if(hint){ hint.className="hhint "+(prob?"bad":v?"ok":""); hint.textContent = prob || (v ? `@${v} is available.` : "3–20 characters: letters, numbers, _ and ."); }
+    if(btn){ btn.disabled = !v || !!prob; btn.textContent = `Claim @${v||"…"}`; }
+  }
 });
 $("#app").addEventListener("keydown", e=>{
   const m = /^cmt-(\d+)$/.exec(e.target.id||"");
@@ -1569,6 +1613,12 @@ $("#app").addEventListener("click", e=>{
 $("#app").addEventListener("submit", async e=>{
   if(e.target.id==="name-form"){ e.preventDefault(); saveName(); return; }
   if(e.target.id==="pass-form"){ e.preventDefault(); savePassword(); return; }
+  if(e.target.id==="handle-form"){ e.preventDefault();
+    const v=(CM.handleDraft||"").toLowerCase(), prob=handleProblem(v); if(prob){ toast(prob); return; }
+    const btn=e.target.querySelector("button"); if(btn) btn.disabled=true;
+    const msg = await saveHandle(v);
+    if(msg){ toast(msg); if(btn) btn.disabled=false; return; }
+    CM.handleDraft=""; render(); toast(`You're @${v}. Welcome to Community.`); return; }
   if(e.target.id!=="auth-form") return;
   e.preventDefault();
   const err=$("#a-err"), ok=$("#a-ok"), btn=$("#a-submit");

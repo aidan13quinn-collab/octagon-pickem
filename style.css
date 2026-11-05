@@ -595,7 +595,7 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .cardsw{white-space:nowrap;flex:none}
 
 /* build stamp: must match BUILD in app.js */
-:root{--fw-build:"2026-11-06a"}
+:root{--fw-build:"2026-11-06b"}
 /* ---------- community ---------- */
 .cmhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .cmhead h2{margin:0;font-family:var(--f-bug);font-weight:700;font-size:26px;text-transform:uppercase}
@@ -704,3 +704,19 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .sgroup .srow:first-child{border-top:0}
 .srow.danger{color:var(--hot-red)}
 .srow.danger svg{color:var(--hot-red)}
+/* ---------- @handles ---------- */
+.phat{font-family:var(--f-label);font-weight:600;font-size:14px;letter-spacing:.04em;color:var(--muted);margin-top:-2px}
+.pat{font-family:var(--f-label);font-weight:600;font-size:12px;letter-spacing:.03em;color:var(--muted);margin-left:6px}
+.hgate{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;padding:28px 18px;border-radius:16px;background:radial-gradient(90% 70% at 50% 0%,rgba(255,194,61,.16),transparent 70%),#15171d;border:1px solid #2C303A}
+.hgico{width:58px;height:58px;display:grid;place-items:center;font-family:var(--f-bug);font-weight:700;font-size:30px;color:#16120a;background:var(--hot-gold);clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}
+.hgate h3{margin:0;font-family:var(--f-bug);font-weight:700;font-size:24px;text-transform:uppercase}
+.hgate p{margin:0;color:var(--muted);font-size:15px;max-width:34ch;line-height:1.4}
+.hfield{display:flex;align-items:center;width:100%;max-width:320px;background:#0f1116;border:1px solid var(--line);border-radius:12px;padding:0 12px}
+.hfield:focus-within{border-color:var(--hot-gold)}
+.hfield span{font-family:var(--f-bug);font-weight:700;font-size:20px;color:var(--hot-gold)}
+.hfield input{flex:1;min-width:0;border:0;background:none;color:var(--ink);font-size:18px;padding:12px 6px;outline:none}
+.hfield.sm span{font-size:16px} .hfield.sm input{font-size:16px;padding:9px 6px}
+.hhint{font-size:13px!important}
+.hhint.bad{color:var(--hot-red)!important} .hhint.ok{color:#2EE58A!important}
+.hgate .btn{min-width:220px}
+.phero:has(.pedit) .phtop{padding-right:58px}
