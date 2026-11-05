@@ -13,12 +13,14 @@ const S = {
   prefs: null,           // this player's notification choices
   push: { subscribed: false, busy: false }
 };
-try { const t = localStorage.getItem("op-tab"); if (t === "picks" || t === "board") S.tab = t; } catch (e) {}
+// bottom tabs, left to right (swipe moves between neighbours)
+const TABS = ["profile","community","picks","board","settings"];
+try { const t = localStorage.getItem("op-tab"); if (TABS.includes(t)) S.tab = t; } catch (e) {}
 try { const v = localStorage.getItem("op-board"); if (v === "all" || v === "week") S.boardView = v; } catch (e) {}
 // links from notifications: /?tab=picks&card=<card id>
 try {
   const q = new URLSearchParams(location.search);
-  const t = q.get("tab"); if (t === "picks" || t === "board") S.tab = t;
+  const t = q.get("tab"); if (TABS.includes(t)) S.tab = t;
   if (q.get("card")) S.cardId = q.get("card");
   if (q.has("tab") || q.has("card")) history.replaceState(null, "", location.pathname);
 } catch (e) {}
@@ -249,21 +251,20 @@ function emptyHTML(h,p){ return `<div class="empty"><h3>${esc(h)}</h3><p>${esc(p
 
 function render(){
   const signedIn = !!S.uid;
-  $("#me").hidden = !signedIn; $("#tabs").hidden = !signedIn;
+  $("#me").hidden = !signedIn; $("#bn").hidden = !signedIn; document.body.classList.toggle("has-bn", signedIn);
   if(signedIn){
     $("#me").innerHTML = `<span class="who-am-i">${avatar(S.uid)}<span id="me-name"></span></span>`;
     $("#me-name").innerHTML = S.loaded ? nameHTML(S.uid) : esc(nameOf(S.uid));
     $("#me-name").insertAdjacentHTML("afterbegin", commish(S.uid));
     if(S.loaded) $("#me-name").insertAdjacentHTML("beforeend", crown(S.uid));
-    document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected", String(!S.page && t.dataset.tab===S.tab)));
+    document.querySelectorAll("#bn button").forEach(t=>{ const on = t.dataset.tab===S.tab; t.classList.toggle("on", on); t.setAttribute("aria-selected", String(on)); });
+    document.querySelectorAll("#bn-dots i").forEach((d,i)=>d.classList.toggle("on", TABS[i]===S.tab));
   }
-  $("#menu-btn").hidden = !signedIn;
-  if(!signedIn) closeMenu();
   preserve(()=>{
     const app = $("#app");
     if(!signedIn){ app.innerHTML = authHTML(); return; }
     if(!S.loaded){ app.innerHTML = emptyHTML("Loading the card","Connecting to your league."); return; }
-    app.innerHTML = S.page ? pageHTML() : (S.tab==="board" ? boardHTML() : picksHTML());
+    app.innerHTML = tabHTML();
   });
 }
 
@@ -314,10 +315,36 @@ function cardSelect(){
 }
 
 /* ---------- menu ---------- */
-function openMenu(){ $("#menu").hidden=false; $("#menu-scrim").hidden=false; $("#menu-btn").setAttribute("aria-expanded","true"); $("#menu button")?.focus(); }
-function closeMenu(){ $("#menu").hidden=true; $("#menu-scrim").hidden=true; $("#menu-btn").setAttribute("aria-expanded","false"); }
+function tabHTML(){
+  if(S.tab==="profile") return playerHTML(S.uid, true);
+  if(S.tab==="community") return communityHTML();
+  if(S.tab==="board") return boardHTML();
+  if(S.tab==="settings") return S.page ? pageHTML() : settingsMenuHTML();
+  return picksHTML();
+}
+// community: empty for now
+function communityHTML(){ return `<div class="event-head"><h2>Community</h2></div>`; }
+// settings tab: the old menu as a list; each row opens its page inside this tab
+function settingsMenuHTML(){
+  const row = (attr, icon, label) => `<button class="srow" ${attr}>${icon}<span>${label}</span><span class="chev" aria-hidden="true">›</span></button>`;
+  return `<div class="event-head"><h2>Settings</h2></div><div class="slist">
+    ${row('data-act="page" data-v="account"', NAV_ICONS.profile, "Account")}
+    ${row('data-act="page" data-v="settings"', NAV_ICONS.bell, "Theme &amp; notifications")}
+    ${row('data-act="page" data-v="app"', NAV_ICONS.phone, "Get the app")}
+  </div><div class="slist">${row('data-act="signout"', NAV_ICONS.out, "Sign out")}</div>`;
+}
+// switching tabs: each tab remembers where you were scrolled to
+const tabScroll = {};
+function setTab(t, keepScroll){
+  if(!TABS.includes(t)) return;
+  tabScroll[S.tab] = window.scrollY;
+  if(t!==S.tab){ S.viewUser=null; S.page=null; }
+  S.tab=t; try{ localStorage.setItem("op-tab",t); }catch(err){}
+  render();
+  window.scrollTo(0, keepScroll===false ? 0 : (tabScroll[t]||0));
+}
 function openPage(p){
-  S.page=p; S.viewUser=null; render(); window.scrollTo(0,0);
+  S.tab="settings"; S.page=p; S.viewUser=null; render(); window.scrollTo(0,0);
   if(p==="settings"){ loadPrefs(); syncPush(); }
 }
 async function signOut(){
@@ -457,7 +484,7 @@ async function savePassword(){
 }
 
 /* ---------- pages ---------- */
-const pageTitles = { account:"Account", settings:"Settings", app:"Get the app" };
+const pageTitles = { account:"Account", settings:"Theme & notifications", app:"Get the app" };
 function pageHTML(){
   let h = `<button class="backbtn" data-act="closepage">‹ Back</button><div class="event-head"><h2>${esc(pageTitles[S.page]||"")}</h2></div>`;
   if(S.page==="account") h += accountHTML();
@@ -847,10 +874,10 @@ function cardRecord(uid, c){
   (c.fights||[]).forEach(f=>{ const g=grade(pickOf(uid,c.id,f.id),f,owes(uid,c)); if(g===1) w++; else if(g===0) l++; });
   return {w,l};
 }
-function playerHTML(uid){
+function playerHTML(uid, asTab){
   const me = uid===S.uid;
   const r = standings().find(x=>x.id===uid) || {w:0,l:0,lw:0,ll:0};
-  let h = `<button class="backbtn" data-act="back">‹ Standings</button>
+  let h = `${asTab?"":`<button class="backbtn" data-act="back">‹ Leaders</button>`}
     <div class="phead">${avatar(uid)}<div class="pmeta"><h2>${commish(uid)}${nameHTML(uid)}${crown(uid)}${me?" (you)":""}</h2>
       <div class="pstats"><span><b class="nw">${r.w}–${r.l}</b> picks${r.w+r.l?` (${fmtPct(r)})`:""}</span><span class="lk-stat"><b class="nw">${r.lw}–${r.ll}</b> locks</span></div>${lockTag(uid)}</div></div>`;
   const c = currentCard();
@@ -1033,19 +1060,71 @@ async function sharePicks(c){
 }
 
 /* ---------- events ---------- */
-$("#tabs").addEventListener("click", e=>{
-  const t=e.target.closest(".tab"); if(!t) return;
-  S.tab=t.dataset.tab; S.viewUser=null; S.page=null; try{ localStorage.setItem("op-tab",S.tab); }catch(err){} render();
+/* ---------- bottom tabs ---------- */
+const NAV_ICONS = {
+  profile:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>',
+  community:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01"/></svg>',
+  picks:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><polygon points="8,2.5 16,2.5 21.5,8 21.5,16 16,21.5 8,21.5 2.5,16 2.5,8"/><path d="m8 12 3 3 5-6" stroke-linecap="round"/></svg>',
+  board:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>',
+  settings:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+  phone:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>',
+  out:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3"/></svg>'
+};
+const TAB_LABELS = { profile:"Profile", community:"Community", picks:"Picks", board:"Leaders", settings:"Settings" };
+(function buildNav(){
+  $("#bn").innerHTML = TABS.map(t=>`<button role="tab" data-tab="${t}" aria-label="${TAB_LABELS[t]}" aria-selected="false">${NAV_ICONS[t]}<span>${TAB_LABELS[t]}</span></button>`).join("");
+  $("#bn-dots").innerHTML = TABS.map(()=>"<i></i>").join("");
+})();
+$("#bn").addEventListener("click", e=>{
+  const t=e.target.closest("button[data-tab]"); if(!t) return;
+  if(t.dataset.tab===S.tab){ S.viewUser=null; S.page=null; render(); window.scrollTo({top:0,behavior:"smooth"}); return; } // tap the tab you're on: back to its top
+  setTab(t.dataset.tab);
 });
-$("#menu-btn").addEventListener("click", ()=>{ $("#menu").hidden ? openMenu() : closeMenu(); });
-$("#menu-scrim").addEventListener("click", closeMenu);
-document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("#menu").hidden){ closeMenu(); $("#menu-btn").focus(); } });
-$("#menu").addEventListener("click", async e=>{
-  const b=e.target.closest("button"); if(!b) return;
-  closeMenu();
-  if(b.dataset.act==="signout"){ await signOut(); return; }
-  if(b.dataset.page) openPage(b.dataset.page);
-});
+// swipe left/right anywhere on the page to move between tabs.
+// The direction locks after a few pixels, so scrolling up and down never flips tabs.
+// Swipes that start at the very edge are left to the phone (iPhone's swipe-back), and so are
+// swipes on inputs, dropdowns and anything that scrolls sideways.
+(function swipeTabs(){
+  let x0=0, y0=0, t0=0, mode=null, dx=0;
+  const app = $("#app");
+  const scrollsSideways = el => { for(let n=el; n && n!==document.body; n=n.parentElement){ const o=getComputedStyle(n).overflowX; if((o==="auto"||o==="scroll") && n.scrollWidth > n.clientWidth+2) return true; } return false; };
+  const blocked = el => !!el.closest("input,textarea,select,.sharesheet,#bn,[data-noswipe]") || scrollsSideways(el);
+  const idx = () => TABS.indexOf(S.tab);
+  document.addEventListener("touchstart", e=>{
+    if(!S.uid || e.touches.length!==1 || blocked(e.target)){ mode="off"; return; }
+    const t=e.touches[0]; x0=t.clientX; y0=t.clientY; t0=Date.now(); dx=0;
+    mode = (x0 < 22 || x0 > window.innerWidth-22) ? "off" : null;
+  }, {passive:true});
+  document.addEventListener("touchmove", e=>{
+    if(mode==="off" || mode==="y") return;
+    const t=e.touches[0], mx=t.clientX-x0, my=t.clientY-y0;
+    if(mode===null){
+      if(Math.abs(mx)<10 && Math.abs(my)<10) return;
+      mode = Math.abs(mx) > Math.abs(my)*1.2 ? "x" : "y";
+      if(mode==="y") return;
+      app.style.transition="none";
+    }
+    e.preventDefault();
+    const edge = (mx>0 && idx()===0) || (mx<0 && idx()===TABS.length-1);
+    dx = edge ? mx*0.25 : mx;   // rubber-band at the first and last tab
+    app.style.transform=`translateX(${dx}px)`;
+  }, {passive:false});
+  document.addEventListener("touchend", ()=>{
+    if(mode!=="x"){ mode=null; return; }
+    mode=null;
+    const W=window.innerWidth, v=Math.abs(dx)/Math.max(1,Date.now()-t0);
+    const dir = dx<0 ? 1 : -1, next = TABS[idx()+dir];
+    if(next && (Math.abs(dx) > W*0.22 || (v>0.45 && Math.abs(dx)>40))){
+      app.style.transition="transform .16s ease-in"; app.style.transform=`translateX(${-dir*W}px)`;
+      setTimeout(()=>{
+        setTab(next);
+        app.style.transition="none"; app.style.transform=`translateX(${dir*W*0.35}px)`;
+        requestAnimationFrame(()=>requestAnimationFrame(()=>{ app.style.transition="transform .2s ease-out"; app.style.transform=""; }));
+      }, 150);
+    } else { app.style.transition="transform .2s ease-out"; app.style.transform=""; }
+  });
+})();
 $("#app").addEventListener("change", e=>{
   if(e.target.id==="sel-card"){ S.cardId=e.target.value; render(); }
   if(e.target.dataset.pref){ savePref(e.target.dataset.pref, e.target.checked); }
@@ -1063,7 +1142,7 @@ $("#app").addEventListener("click", e=>{
   if(act==="push-off"){ pushOff(); return; }
   if(act==="push-test"){ pushTest(); return; }
   if(act==="signout"){ signOut(); return; }
-  if(act==="player"){ S.viewUser=b.dataset.uid; S.tab="board"; render(); window.scrollTo(0,0); return; }
+  if(act==="player"){ if(b.dataset.uid===S.uid){ setTab("profile", false); return; } tabScroll[S.tab]=window.scrollY; S.tab="board"; S.page=null; S.viewUser=b.dataset.uid; try{ localStorage.setItem("op-tab","board"); }catch(err){} render(); window.scrollTo(0,0); return; }
   if(act==="back"){ S.viewUser=null; render(); return; }
   if(act==="pcard"){ S.cardId=b.dataset.card; render(); return; }
   if(act==="hist"){ const k=b.dataset.key; S.openForm.has(k)?S.openForm.delete(k):S.openForm.add(k); render(); return; }
