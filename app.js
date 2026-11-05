@@ -653,10 +653,13 @@ function picksHTML(){
 function fighterBtn(c,f,side,p,locked,res){
   const name = side==="red"?f.red:f.blue;
   const odds = side==="red"?f.oddsRed:f.oddsBlue;
-  const won = res && res.w===side;
-  return `<button class="fighter ${side}${won?" won":""}" data-act="pick" data-fight="${esc(f.id)}" data-v="${side}" aria-pressed="${p===side}" ${locked?"disabled":""}>
-    ${boutHasPhoto(f)?face(name):""}<span class="cn">${side==="red"?"Red corner":"Blue corner"}${won?" · Winner":""}</span><span class="nm">${side==="red"?flag(name)+esc(name):esc(name)+flag(name)}</span>
-    <span class="od">${odds!=null?esc(fmtOdds(odds)):"Odds TBA"}</span></button>`;
+  const won = res && res.w===side, mine = p===side, other = !!p && !mine;
+  const rec = S.fighters[name]?.record;
+  // split face-off: your side floods with its corner color, the other side fades back
+  const tag = won ? `<span class="ftag win">${mine?"Your pick · Won":"Winner"}</span>` : mine ? `<span class="ftag">Your pick</span>` : "";
+  return `<button class="fighter ${side}${won?" won":""}${mine?" pick":""}${other&&!won?" out":""}" data-act="pick" data-fight="${esc(f.id)}" data-v="${side}" aria-pressed="${mine}" aria-label="${esc(name)}${side==="red"?", red corner":", blue corner"}" ${locked?"disabled":""}>
+    ${tag}${boutHasPhoto(f)?face(name):""}<span class="nm">${side==="red"?flag(name)+esc(name):esc(name)+flag(name)}</span>
+    <span class="fsub"><span class="od">${odds!=null?esc(fmtOdds(odds)):"Odds TBA"}</span>${rec?`<span class="rec">${esc(String(rec).replace(/-0$/,""))}</span>`:""}</span></button>`;
 }
 // fighter photos: ufc.com fight card photos, or Wikimedia Commons when ufc.com has none
 // (filled in by the fighter-photos job). A bout shows faces when at least one fighter has a photo;
