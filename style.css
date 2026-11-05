@@ -484,3 +484,17 @@ header.band::after{background:linear-gradient(90deg,#101218 10%,transparent 45%,
 .bout.is-lock .corners .fighter.blue.pick{background:linear-gradient(0deg,rgba(255,194,61,.24),transparent 55%),linear-gradient(245deg,rgba(61,139,255,.62),rgba(61,139,255,.2) 75%)}
 .bout.is-lock{border-color:var(--hot-gold);box-shadow:0 0 0 1px var(--hot-gold),0 0 22px rgba(255,194,61,.18)}
 @media (max-width:420px){ .corners .fighter .nm{font-size:17px} .corners .fighter.red{padding-right:20%} .corners .fighter.blue{padding-left:20%} }
+/* fight cards without the outer box: just the face-off, spaced apart */
+.bout{background:none;border:0;border-radius:0;padding:0;box-shadow:none;overflow:visible;gap:10px}
+.bout + .bout{margin-top:10px}
+.bout-meta{padding:0 2px}
+.corners{margin:0;border-radius:14px;overflow:hidden}
+.crowd,.hist{border-top:0;padding-top:0}
+.bout.off{border:0}
+.bout.is-lock{border:0;box-shadow:none}
+.bout.is-lock .corners{box-shadow:0 0 0 1.5px var(--hot-gold),0 0 22px rgba(255,194,61,.22)}
+/* "Your pick" sits above the fighter's head instead of in the corner */
+.ftag{position:static;align-self:flex-start;margin-bottom:6px}
+.fighter.blue .ftag{align-self:flex-end}
+/* the fighter you didn't pick stays visible, just quieter */
+.corners .fighter.out{filter:grayscale(.55) brightness(.82)}
