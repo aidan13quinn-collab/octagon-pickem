@@ -4,7 +4,7 @@
 // The site's files are uploaded one at a time, so a phone can briefly end up with this app.js next to an
 // older style.css (or keep an old copy cached). style.css carries the same build stamp; if they don't match,
 // fetch fresh copies of both and reload once.
-const BUILD = "2026-11-06b";
+const BUILD = "2026-11-06c";
 (function selfHeal(){
   try{
     const css = getComputedStyle(document.documentElement).getPropertyValue("--fw-build").replace(/["'\s]/g,"");
@@ -1071,7 +1071,7 @@ function playerHTML(uid, asTab){
   let h = `${asTab?"":`<button class="backbtn" data-act="back">‹ Leaders</button>`}
   <section class="phero${champ?" champ":""}"${acc&&!champ?` style="--pacc:${acc}"`:""}>
     ${me?`<button class="pedit" data-act="editprofile">Edit</button>`:""}
-    <div class="phtop">${avatar(uid)}<div class="phid">${P.nickname?`<div class="pnick">"${esc(P.nickname)}"</div>`:""}<h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2>${atHTML(uid,"phat")}<div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}${lockTag(uid)}</div></div>
+    <div class="phtop">${avatar(uid)}<div class="phid">${P.nickname?`<div class="pnick">"${esc(P.nickname)}"</div>`:""}<h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2>${atHTML(uid,"phat")}<div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}</div></div>
     <div class="tape"><div><b>${r.w}–${r.l}</b><span>Record</span></div><div><b>${r.w+r.l?fmtPct(r):"–"}</b><span>Win %</span></div><div class="tl"><b>${r.lw}–${r.ll}</b><span>Locks</span></div><div><b>${r.cards||0}</b><span>Cards</span></div></div>
   </section>`;
   // belt case
@@ -1422,10 +1422,16 @@ function friendsHTML(){
   if(inc.length) h += `<div class="psec"><span>Requests</span><span>${inc.length}</span></div><div class="frlist">${inc.map(id=>row(id,`<button class="btn sm gold" data-act="fr-accept" data-uid="${esc(id)}">Accept</button><button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Decline</button>`)).join("")}</div>`;
   h += `<div class="psec"><span>Your friends</span><span>${fr.length}</span></div>`;
   h += fr.length ? `<div class="frlist">${fr.sort((a,b)=>nameOf(a).localeCompare(nameOf(b))).map(id=>row(id,`<button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Remove</button>`)).join("")}</div>` : `<p class="note">No friends yet. Add people from the league below.</p>`;
-  h += `<div class="psec"><span>Add friends</span></div><input id="fr-search" class="frsearch" placeholder="Search the league" autocomplete="off" value="${esc(CM.search)}">`;
-  const others = ids.filter(id=>!fr.includes(id) && !inc.includes(id) && (!q || nameOf(id).toLowerCase().includes(q.replace(/^@/,"")) || handleOf(id).toLowerCase().includes(q.replace(/^@/,"")))).sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
-  h += `<div class="frlist">${others.map(id=>{ const st = friendState(id);
-    return row(id, st==="sent" ? `<button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Requested ✓</button>` : `<button class="btn sm gold" data-act="fr-add" data-uid="${esc(id)}">Add</button>`); }).join("") || `<p class="note">No one matches that name.</p>`}</div>`;
+  // add friends by @ only: type a username, see matching @s
+  h += `<div class="psec"><span>Add friends</span></div><label class="hfield frsearchf"><span>@</span><input id="fr-search" placeholder="username" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" value="${esc(CM.search.replace(/^@/,""))}"></label>`;
+  const hq = q.replace(/^@/,"");
+  if(hq){
+    const found = ids.filter(id=>handleOf(id) && !fr.includes(id) && !inc.includes(id) && handleOf(id).toLowerCase().includes(hq))
+      .sort((a,b)=>{ const A=handleOf(a).toLowerCase(), B=handleOf(b).toLowerCase(); return (B.startsWith(hq)-A.startsWith(hq)) || A.localeCompare(B); }).slice(0,20);
+    const urow = id => { const st = friendState(id);
+      return `<div class="frrow"><button class="namelink pwho" data-act="player" data-uid="${esc(id)}">${avatar(id)}<span class="pname"><b class="fat">@${esc(handleOf(id))}</b></span></button><span class="frbtns">${st==="sent" ? `<button class="btn sm ghost" data-act="fr-remove" data-uid="${esc(id)}">Requested ✓</button>` : `<button class="btn sm gold" data-act="fr-add" data-uid="${esc(id)}">Add</button>`}</span></div>`; };
+    h += found.length ? `<div class="frlist">${found.map(urow).join("")}</div>` : `<p class="note">No one has @${esc(hq)}. Check the spelling with your friend.</p>`;
+  } else h += `<p class="note">Type your friend's @ to find them.</p>`;
   return h;
 }
 async function communityAct(act, b){

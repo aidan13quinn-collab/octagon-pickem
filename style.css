@@ -595,7 +595,7 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .cardsw{white-space:nowrap;flex:none}
 
 /* build stamp: must match BUILD in app.js */
-:root{--fw-build:"2026-11-06b"}
+:root{--fw-build:"2026-11-06c"}
 /* ---------- community ---------- */
 .cmhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .cmhead h2{margin:0;font-family:var(--f-bug);font-weight:700;font-size:26px;text-transform:uppercase}
@@ -720,3 +720,5 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .hhint.bad{color:var(--hot-red)!important} .hhint.ok{color:#2EE58A!important}
 .hgate .btn{min-width:220px}
 .phero:has(.pedit) .phtop{padding-right:58px}
+.frsearchf{max-width:none}
+.fat{font-family:var(--f-bug);font-weight:600;font-size:16px;letter-spacing:.02em}
