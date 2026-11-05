@@ -4,7 +4,7 @@
 // The site's files are uploaded one at a time, so a phone can briefly end up with this app.js next to an
 // older style.css (or keep an old copy cached). style.css carries the same build stamp; if they don't match,
 // fetch fresh copies of both and reload once.
-const BUILD = "2026-11-06e";
+const BUILD = "2026-11-06g";
 (function selfHeal(){
   try{
     const css = getComputedStyle(document.documentElement).getPropertyValue("--fw-build").replace(/["'\s]/g,"");
@@ -1353,7 +1353,8 @@ async function loadCommunity(force){
     sb.from("post_saves").select("post_id").eq("user_id", S.uid)
   ]);
   if(posts.error){
-    CM.loading=false; CM.loaded=true; CM.error = /does not exist|schema cache/i.test(posts.error.message||"") ? "setup" : "load";
+    // remember when it failed so the next screen refresh doesn't immediately ask again (that looped before)
+    CM.loading=false; CM.loaded=true; CM.at=Date.now(); CM.error = /does not exist|schema cache/i.test(posts.error.message||"") ? "setup" : "load";
     if(S.tab==="community") render(); return;
   }
   CM.error = null;
