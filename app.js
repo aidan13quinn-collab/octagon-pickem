@@ -359,6 +359,7 @@ function cardSelect(){
 
 /* ---------- menu ---------- */
 function tabHTML(){
+  if(S.badgesUid && (S.tab==="profile" || S.tab==="board")) return badgesPageHTML(S.badgesUid);
   if(S.tab==="profile") return playerHTML(S.uid, true);
   if(S.tab==="community") return communityHTML();
   if(S.tab==="board") return boardHTML();
@@ -370,7 +371,7 @@ const tabScroll = {};
 function setTab(t, keepScroll){
   if(!TABS.includes(t)) return;
   tabScroll[S.tab] = window.scrollY;
-  if(t!==S.tab){ S.viewUser=null; S.page=null; if(t==="board") S.boardView="week"; }
+  if(t!==S.tab){ S.viewUser=null; S.page=null; S.badgesUid=null; if(t==="board") S.boardView="week"; }
   S.tab=t; try{ localStorage.setItem("op-tab",t); }catch(err){}
   if(t==="settings"){ loadPrefs(); syncPush(); }
   render();
@@ -1193,64 +1194,45 @@ function badgeEmblem(st, cls){
   const c = RANK_COLOR[st.lvl];
   return `<svg class="${cls||"em"}" viewBox="0 0 48 48" aria-hidden="true" style="color:${c}"><polygon points="16,1.5 32,1.5 46.5,16 46.5,32 32,46.5 16,46.5 1.5,32 1.5,16" fill="${st.lvl===4?"#2a2212":"#0f1116"}" stroke="${c}" stroke-width="2.4"/><polygon points="17.4,5.5 30.6,5.5 42.5,17.4 42.5,30.6 30.6,42.5 17.4,42.5 5.5,30.6 5.5,17.4" fill="${c}" fill-opacity="${st.lvl?.13:.04}"/><g transform="translate(13 9.5) scale(.92)" fill="none" stroke="${c}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">${st.b.g}</g>${[0,1,2,3].map(i=>`<rect x="${14.6+i*5.2}" y="36" width="3.6" height="2.4" rx="1" fill="${c}" fill-opacity="${i<st.lvl?1:.22}"/>`).join("")}</svg>`;
 }
-function badgeTile(st, uid, extra){
-  const pct = st.next ? Math.min(100, st.count/st.next*100) : 100;
-  return `<button class="bdg ${RANK_KEY[st.lvl]}${extra||""}" data-act="badge" data-uid="${esc(uid)}" data-k="${st.b.k}" aria-label="${esc(st.b.name)}: ${RANKS[st.lvl]}, ${st.count}">${badgeEmblem(st)}<span class="nm">${esc(st.b.name)}</span><span class="tr">${RANKS[st.lvl]}</span><span class="ct">${st.count}${st.next?`/${st.next}`:""}<span class="bar"><i style="width:${pct}%"></i></span></span></button>`;
+function badgeTile(st, uid){
+  return `<button class="bdg ${RANK_KEY[st.lvl]}" style="--t:${RANK_COLOR[st.lvl]}" data-act="badge" data-uid="${esc(uid)}" data-k="${st.b.k}" aria-label="${esc(st.b.name)}: ${RANKS[st.lvl]}">${badgeEmblem(st)}<span class="nm">${esc(st.b.name)}</span><span class="tr">${RANKS[st.lvl]}</span></button>`;
 }
 // the patch on the profile header that opens all of a player's badges
 function badgePatch(uid){
   const all = badgesOf(uid), earned = all.filter(x=>x.lvl>0).length, top = all.slice().sort((a,b)=>b.lvl-a.lvl)[0];
   return `<button class="bpatch r${top.lvl}" data-act="badges" data-uid="${esc(uid)}" aria-label="Badges, ${earned} of ${all.length} earned">${badgeEmblem(top,"pem")}<b>Badges</b><small>${earned}/${all.length}</small></button>`;
 }
-// bottom sheet: every badge (grid), or one badge's progress (detail)
-function badgeSheetHTML(uid, k){
-  const me = uid===S.uid, all = badgesOf(uid);
-  if(!k){
-    return `<span class="grab" aria-hidden="true"></span><div class="eshead"><h3>${me?"Your badges":esc(nameOf(uid))+"'s badges"}</h3><button type="button" class="esx" data-bs="close" aria-label="Close">×</button></div>
-      <p class="note bsnote">${me?"Tap a badge to see your progress and add up to 3 to your profile.":"Tap a badge to see what it is and their progress."}</p>
-      <div class="badges">${all.map(st=>{ const on = me && pickedBadges(uid).includes(st.b.k); return badgeTile(st, uid, on?" sel":""); }).join("")}</div>`;
+// the Badges screen: every badge as a row; tap one to open its ranks and progress
+function badgesPageHTML(uid){
+  const me = uid===S.uid, all = badgesOf(uid), picked = pickedBadges(uid), earned = all.filter(x=>x.lvl>0).length;
+  let h = `<button class="backbtn" data-act="badgesback">‹ ${me?"Profile":esc(nameOf(uid))}</button>
+    <div class="bph"><h2>${me?"Your badges":esc(nameOf(uid))+"'s badges"}</h2><span class="label">${earned} of ${all.length} earned${me?` · ${picked.length} of 3 on profile`:""}</span></div>
+    <div class="blist">`;
+  for(const st of all){
+    const open = S.badgeOpen===st.b.k, on = picked.includes(st.b.k), c = RANK_COLOR[st.lvl];
+    const pct = st.next ? Math.min(100, st.count/st.next*100) : 100;
+    const goal = st.next ? `${st.count} / ${st.next} to ${RANKS[st.lvl+1]}` : `${st.count}${st.b.unit?" "+st.b.unit:""} · top rank`;
+    h += `<div class="brow ${RANK_KEY[st.lvl]}${open?" open":""}" style="--t:${c}">
+      <button class="brhead" data-act="badgeopen" data-k="${st.b.k}" aria-expanded="${open}">${badgeEmblem(st)}
+        <span class="brtxt"><b>${esc(st.b.name)}${on?`<i class="bron" title="On profile">★</i>`:""}</b><small>${goal}</small><span class="bar"><i style="width:${pct}%"></i></span></span>
+        <span class="brrank">${RANKS[st.lvl]}</span></button>`;
+    if(open){
+      const full = !on && picked.length>=3;
+      h += `<div class="brbody"><p>${esc(st.b.what)}</p>
+        <div class="ladder">${[0,...st.b.t].map((v,i)=>`<div class="${i===st.lvl?"on":""}" style="--t:${RANK_COLOR[i]}"><b>${v}</b>${RANKS[i]}</div>`).join("")}</div>
+        ${me?`<button class="bpin${on?" on":""}" data-act="badgepin" data-k="${st.b.k}" ${full?"disabled":""}>${on?"★ On your profile · tap to remove":full?"3 already on your profile":"☆ Show on my profile"}</button>`:""}</div>`;
+    }
+    h += `</div>`;
   }
-  const st = all.find(x=>x.b.k===k); if(!st) return "";
-  const picked = pickedBadges(uid), on = picked.includes(k);
-  const ladder = [0,...st.b.t].map((v,i)=>`<div class="${i===st.lvl?"on":""}" style="--t:${RANK_COLOR[i]}">${RANKS[i]}<b>${v}</b></div>`).join("");
-  const left = st.next ? st.next - st.count : 0;
-  const prog = st.lvl===4 ? `${st.count}${st.b.unit?" "+st.b.unit:""}. Champion, the top rank.` : `${st.count} so far. <b>${left} more</b> for ${RANKS[st.lvl+1]}.`;
-  let btn = "";
-  if(me){
-    const full = !on && picked.length>=3;
-    btn = `<button class="btn ${on?"ghost":"gold"}" data-bs="toggle" data-k="${k}" ${full?"disabled":""}>${on?"Remove from my profile":"Show on my profile"}</button>
-      <p class="note bsnote">${full?"You're showing 3 already. Remove one first.":`${picked.length} of 3 on your profile.`}</p>`;
-  }
-  return `<span class="grab" aria-hidden="true"></span><div class="eshead"><button type="button" class="bsback" data-bs="all">‹ All badges</button><button type="button" class="esx" data-bs="close" aria-label="Close">×</button></div>
-    <div class="bshero">${badgeEmblem(st,"bem")}<div><h3>${esc(st.b.name)}</h3><span class="tr" style="--t:${RANK_COLOR[st.lvl]}">${RANKS[st.lvl]}</span><p>${esc(st.b.what)}</p></div></div>
-    <div class="ladder">${ladder}</div><p class="bsprog">${prog}</p>${btn}`;
+  return h + `</div>`;
 }
-function openBadges(uid, k){
-  let el = document.querySelector(".badgesheet");
-  if(!el){
-    document.body.insertAdjacentHTML("beforeend", `<div class="sharesheet editsheet badgesheet" role="dialog" aria-label="Badges"><div class="esheet"></div></div>`);
-    el = document.querySelector(".badgesheet");
-    const onKey = e=>{ if(e.key==="Escape") close(); };
-    const close = ()=>{ el.remove(); document.removeEventListener("keydown", onKey); };
-    document.addEventListener("keydown", onKey);
-    el.addEventListener("click", async e=>{
-      if(e.target===el) return close();
-      const t = e.target.closest("[data-act='badge'],[data-bs]"); if(!t) return;
-      if(t.dataset.act==="badge"){ e.stopPropagation(); return show(t.dataset.k); }
-      if(t.dataset.bs==="close") return close();
-      if(t.dataset.bs==="all") return show(null);
-      if(t.dataset.bs==="toggle") toggleBadge(t.dataset.k).then(()=>show(t.dataset.k));
-    });
-  }
-  const show = key => { el.dataset.k = key||""; el.querySelector(".esheet").innerHTML = badgeSheetHTML(uid, key); };
-  show(k||null);
-}
+function openBadges(uid, k){ tabScroll[S.tab]=window.scrollY; S.badgesUid = uid; S.badgeOpen = k || null; render(); window.scrollTo(0,0); }
 async function toggleBadge(k){
   const cur = pickedBadges(S.uid);
   const next = cur.includes(k) ? cur.filter(x=>x!==k) : [...cur, k].slice(0,3);
   const { error } = await sb.from("profiles").update({ badges: next }).eq("id", S.uid);
   if(error){ toast("Couldn't save your badges. Try again."); return; }
-  S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), badges: next }; bump(); render();
+  S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), badges: next }; bump(); render(); toast(next.includes(k) ? "Added to your profile." : "Removed from your profile.");
 }
 // underdog record: wins and losses on picks of the betting underdog
 function dogRecord(uid){ const U = upsetsOf(uid); return { w: U.hits.length, l: U.dogs - U.hits.length }; }
@@ -1277,7 +1259,7 @@ function playerHTML(uid, asTab){
   }
   // the badges they show off (up to 3)
   const shown = shownBadges(uid);
-  if(shown.length) h += `<div class="psec"><span>Badges</span></div><div class="badges feat">${shown.map(st=>badgeTile(st, uid)).join("")}</div>`;
+  if(shown.length) h += `<div class="psec"><span>Badges</span></div><div class="badges">${shown.map(st=>badgeTile(st, uid)).join("")}</div>`;
   // biggest upsets
   const U = upsetsOf(uid);
   if(U.dogs){
@@ -1722,7 +1704,7 @@ const TAB_LABELS = { profile:"Profile", community:"Community", picks:"Picks", bo
 $("#me").addEventListener("click", e=>{ const g=e.target.closest("[data-go]"); if(!g) return; if(g.dataset.go==="app") openInstallSheet(); else setTab("profile", false); });
 $("#bn").addEventListener("click", e=>{
   const t=e.target.closest("button[data-tab]"); if(!t) return;
-  if(t.dataset.tab===S.tab){ S.viewUser=null; S.page=null; render(); window.scrollTo({top:0,behavior:"smooth"}); return; } // tap the tab you're on: back to its top
+  if(t.dataset.tab===S.tab){ S.viewUser=null; S.page=null; S.badgesUid=null; render(); window.scrollTo({top:0,behavior:"smooth"}); return; } // tap the tab you're on: back to its top
   setTab(t.dataset.tab);
 });
 // swipe left/right anywhere on the page to move between tabs.
@@ -1800,6 +1782,9 @@ $("#app").addEventListener("click", e=>{
   if(act==="editprofile"){ openEditProfile(); return; }
   if(act==="badges"){ openBadges(b.dataset.uid); return; }
   if(act==="badge"){ openBadges(b.dataset.uid, b.dataset.k); return; }
+  if(act==="badgesback"){ S.badgesUid=null; S.badgeOpen=null; render(); window.scrollTo(0, tabScroll[S.tab]||0); return; }
+  if(act==="badgeopen"){ S.badgeOpen = S.badgeOpen===b.dataset.k ? null : b.dataset.k; render(); return; }
+  if(act==="badgepin"){ toggleBadge(b.dataset.k); return; }
   if(act==="closepage"){ S.page=null; render(); window.scrollTo(0,0); return; }
   if(act==="theme"){ setTheme(b.dataset.v); return; }
   if(act==="bview"){ S.boardView=b.dataset.v; render(); return; }
