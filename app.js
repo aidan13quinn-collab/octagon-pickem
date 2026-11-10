@@ -32,13 +32,13 @@ const S = {
 };
 // bottom tabs, left to right (swipe moves between neighbours)
 const TABS = ["profile","community","picks","board","settings"];
-try { const t = localStorage.getItem("op-tab"); if (TABS.includes(t)) S.tab = t; } catch (e) {}
-try { const v = localStorage.getItem("op-board"); if (v === "all" || v === "week") S.boardView = v; } catch (e) {}
+// the app always opens on Picks, and the Leaders tab always opens on Fight week
+S.boardView = "week";
 // links from notifications: /?tab=picks&card=<card id>
 try {
   const q = new URLSearchParams(location.search);
   const t = q.get("tab"); if (TABS.includes(t)) S.tab = t;
-  if (q.get("card")) S.cardId = q.get("card");
+  if (q.get("card")) { S.cardId = q.get("card"); S.cardManual = true; }
   if (q.has("tab") || q.has("card")) history.replaceState(null, "", location.pathname);
 } catch (e) {}
 
@@ -333,22 +333,28 @@ function showUntil(c){
   t.setDate(t.getDate() + (((8 - t.getDay()) % 7) || 7));
   return t.getTime();
 }
-function currentCard(){
+// this week's card: one that's already locked stays up through fight weekend (until Monday
+// morning after its event); otherwise the soonest card that hasn't locked yet, otherwise the most recent
+function autoCard(){
   if(!S.cards.length) return null;
-  let c = S.cards.find(x=>x.id===S.cardId);
-  if(!c){
-    // default: a card that's already locked stays up through fight weekend (until the Monday after
-    // its event); otherwise the soonest card that hasn't locked yet, otherwise the most recent
-    const live = S.cards.filter(x=>cardLocked(x) && Date.now() < showUntil(x)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-    const open = S.cards.filter(x=>!cardLocked(x)).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    c = live[0] || open[0] || S.cards[0];
-    S.cardId = c.id;
-  }
+  const live = S.cards.filter(x=>cardLocked(x) && Date.now() < showUntil(x)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const open = S.cards.filter(x=>!cardLocked(x)).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  return live[0] || open[0] || S.cards[0];
+}
+// the card on screen: one picked from the menu (an old week, say) stays until the week rolls over,
+// then everything moves to the new week's card on its own, even if the app was left open
+function currentCard(){
+  const a = autoCard(); if(!a) return null;
+  if(S.autoId && S.autoId!==a.id){ S.cardManual = false; }
+  S.autoId = a.id;
+  const c = (S.cardManual && S.cards.find(x=>x.id===S.cardId)) || a;
+  S.cardId = c.id;
   return c;
 }
+function pickCard(id){ S.cardId = id; S.cardManual = true; }
 function cardSelect(){
   if(S.cards.length<2) return "";
-  return `<select id="sel-card" aria-label="Fight card">${S.cards.map(c=>`<option value="${esc(c.id)}" ${c.id===S.cardId?"selected":""}>${esc(c.name)}${c.date?" · "+esc(fmtDate(c.date)):""}</option>`).join("")}</select>`;
+  return `<select id="sel-card" aria-label="Fight card">${S.cards.map(c=>`<option value="${esc(c.id)}" ${c.id===currentCard()?.id?"selected":""}>${esc(c.name)}${c.date?" · "+esc(fmtDate(c.date)):""}</option>`).join("")}</select>`;
 }
 
 /* ---------- menu ---------- */
@@ -364,7 +370,7 @@ const tabScroll = {};
 function setTab(t, keepScroll){
   if(!TABS.includes(t)) return;
   tabScroll[S.tab] = window.scrollY;
-  if(t!==S.tab){ S.viewUser=null; S.page=null; }
+  if(t!==S.tab){ S.viewUser=null; S.page=null; if(t==="board") S.boardView="week"; }
   S.tab=t; try{ localStorage.setItem("op-tab",t); }catch(err){}
   if(t==="settings"){ loadPrefs(); syncPush(); }
   render();
@@ -969,10 +975,10 @@ function boardTable(rows, showLock, allTime){
 }
 function boardHTML(){
   if(S.viewUser) return playerHTML(S.viewUser);
-  const view = S.boardView==="week" ? "week" : "all";
+  const view = S.boardView==="all" ? "all" : "week";
   let h = `<div class="seg boardseg" role="group" aria-label="Standings view">
-    <button data-act="bview" data-v="all" aria-pressed="${view==="all"}">All time</button>
-    <button data-act="bview" data-v="week" aria-pressed="${view==="week"}">Fight week</button></div>`;
+    <button data-act="bview" data-v="week" aria-pressed="${view==="week"}">Fight week</button>
+    <button data-act="bview" data-v="all" aria-pressed="${view==="all"}">All time</button></div>`;
   const cc = currentCard();
   if(view==="week"){
     if(!cc) return h + emptyHTML("No fight card yet","The next UFC card is added automatically. Check back soon.");
@@ -982,6 +988,7 @@ function boardHTML(){
     if(!rows.length) return h + emptyHTML("No picks on this card yet","Rankings for this card show up once people make their picks.");
     if(!graded) h += `<p class="note">No results yet. Rankings fill in as the fights finish.</p>`;
     h += boardTable(rows, true);
+    h += weekBeltsHTML(cc);
     h += `<p class="note">Rankings for this card only. Tap a name to see their picks. Ties go to fewer misses, then the lock.</p>`;
     return h;
   }
@@ -994,6 +1001,15 @@ function boardHTML(){
   return h;
 }
 
+// the belts a card handed out (gold for first, silver for second), shown on its Fight week page
+function weekBeltsHTML(c){
+  if(!(c.fights||[]).length || !c.fights.every(f=>f.res && f.res.w)) return "";
+  const P = cardPodium(c), n = cardNumber(c), title = n ? `UFC ${n}` : "Fight Night";
+  const tiles = [...[...P.ids].map(id=>({id,m:"gold"})), ...[...P.silver].map(id=>({id,m:"silver"}))];
+  if(!tiles.length) return "";
+  return `<div class="psec weekbelts"><span>${esc(title)} belts</span><span>${tiles.length}</span></div><div class="beltcase">${tiles.map(t=>{ const r=cardRecord(t.id,c);
+    return `<button class="bcase ${t.m}" data-act="player" data-uid="${esc(t.id)}"><span class="belt ${t.m}${n?" num":""}">${beltSVG(t.m, n||"FN")}</span><b>${esc(nameOf(t.id))}</b><small>${t.m==="gold"?"Gold":"Silver"} · ${r.w}–${r.l}</small></button>`; }).join("")}</div>`;
+}
 // last week's winner(s): most correct picks on the most recent fully graded card
 function lastWinners(){ return cached("winners", lastWinnersCalc); }
 // manual belt calls for specific cards (gold/silver player ids)
@@ -1632,7 +1648,7 @@ $("#app").addEventListener("keydown", e=>{
   if(m && e.key==="Enter"){ e.preventDefault(); communityAct("cm-cmt", { dataset:{ id:m[1] } }); }
 });
 $("#app").addEventListener("change", e=>{
-  if(e.target.id==="sel-card"){ S.cardId=e.target.value; render(); }
+  if(e.target.id==="sel-card"){ pickCard(e.target.value); render(); }
   if(e.target.id==="cm-tagsel"){ CM.tag=e.target.value; render(); }
   if(e.target.dataset.pref){ savePref(e.target.dataset.pref, e.target.checked); }
 });
@@ -1646,14 +1662,14 @@ $("#app").addEventListener("click", e=>{
   if(act==="editprofile"){ openEditProfile(); return; }
   if(act==="closepage"){ S.page=null; render(); window.scrollTo(0,0); return; }
   if(act==="theme"){ setTheme(b.dataset.v); return; }
-  if(act==="bview"){ S.boardView=b.dataset.v; try{ localStorage.setItem("op-board",S.boardView); }catch(err){} render(); return; }
+  if(act==="bview"){ S.boardView=b.dataset.v; render(); return; }
   if(act==="push-on"){ pushOn(); return; }
   if(act==="push-off"){ pushOff(); return; }
   if(act==="push-test"){ pushTest(); return; }
   if(act==="signout"){ signOut(); return; }
   if(act==="player"){ if(b.dataset.uid===S.uid){ setTab("profile", false); return; } tabScroll[S.tab]=window.scrollY; S.tab="board"; S.page=null; S.viewUser=b.dataset.uid; try{ localStorage.setItem("op-tab","board"); }catch(err){} render(); window.scrollTo(0,0); return; }
   if(act==="back"){ S.viewUser=null; render(); return; }
-  if(act==="pcard"){ S.cardId=b.dataset.card; render(); return; }
+  if(act==="pcard"){ pickCard(b.dataset.card); render(); return; }
   if(act==="hist"){ const k=b.dataset.key; S.openForm.has(k)?S.openForm.delete(k):S.openForm.add(k); render(); return; }
   const c=currentCard(); if(!c) return;
   if(act==="share"){ sharePicks(c); return; }
@@ -1709,8 +1725,14 @@ sb.auth.onAuthStateChange((event, session)=>{
 });
 // re-render when a card's lock time passes, and refresh when the tab comes back into view
 let lockSig="";
-setInterval(()=>{ const sig=S.cards.map(c=>cardLocked(c)?1:0).join(""); if(sig!==lockSig){ const first=!lockSig; lockSig=sig; if(S.uid && !first) refreshLight(true); else render(); } },30000);
+setInterval(()=>{ const sig=S.cards.map(c=>cardLocked(c)?1:0).join("")+"|"+(autoCard()?.id||""); if(sig!==lockSig){ const first=!lockSig; lockSig=sig; if(S.uid && !first) refreshLight(true); else render(); } },30000);
 setInterval(()=>{ if(!document.hidden) syncPicks(); },60000);
-document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && S.uid) refreshLight(false); });
+// coming back to the app after 10+ minutes away counts as opening it fresh: back to Picks
+let hiddenAt = 0;
+document.addEventListener("visibilitychange", ()=>{
+  if(document.hidden){ hiddenAt = Date.now(); return; }
+  if(hiddenAt && Date.now()-hiddenAt > 10*60*1000 && S.tab!=="picks" && !document.querySelector(".sharesheet")){ S.viewUser=null; S.page=null; setTab("picks", false); }
+  if(S.uid) refreshLight(false);
+});
 render();
 })();

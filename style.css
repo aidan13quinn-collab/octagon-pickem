@@ -576,6 +576,8 @@ body.has-bn .toast{bottom:calc(100px + max(10px,env(safe-area-inset-bottom,0px))
 .bcase .belt svg{width:112px;height:56px;filter:drop-shadow(0 0 10px rgba(255,194,61,.5))}
 .bcase.silver .belt svg{filter:drop-shadow(0 0 10px rgba(220,226,232,.45))}
 .bcase b{font-family:var(--f-bug);font-weight:600;font-size:15px;text-transform:uppercase}
+.psec.weekbelts{margin-top:18px;margin-bottom:10px}
+button.bcase{font:inherit;color:inherit;cursor:pointer;width:100%}
 .bcase small{font-family:var(--f-label);font-weight:600;font-size:12px;color:var(--muted);letter-spacing:.04em}
 .ups{display:flex;flex-direction:column;gap:8px}
 .up{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:linear-gradient(90deg,rgba(46,229,138,.12),rgba(46,229,138,.02));border:1px solid rgba(46,229,138,.25)}
