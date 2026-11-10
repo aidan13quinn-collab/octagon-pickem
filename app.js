@@ -1121,6 +1121,140 @@ function upsetsOf(uid){
 }
 const cardShort = c => cardNumber(c) ? `UFC ${cardNumber(c)}` : (c.date ? fmtDate(c.date).replace(/,\s*\d{4}$/,"") : "Fight Night");
 const mainEvent = c => { const n=String(c.name||""), i=n.indexOf(":"); return i>0 ? n.slice(i+1).trim() : ""; };
+/* ---------- badges ---------- */
+// Each badge counts something over every card with results. Ranks: Locked (not earned yet), then
+// Unranked, Ranked, Contender and Champion at the four numbers in t. Bouts carry seg ("main",
+// "prelim", "early") from ufc.com; a bout without one doesn't count for Prime Time, Grinder or Clean Sweep.
+const BADGES = [
+  { k:"sniper",   name:"Sniper",      t:[1,3,6,12],   what:"Correct picks on the betting underdog.",
+    g:'<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><path d="M12 1.8v4M12 18.2v4M1.8 12h4M18.2 12h4"/>' },
+  { k:"headliner",name:"Headliner",   t:[1,3,6,12],   what:"Correct main event picks.",
+    g:'<path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/>' },
+  { k:"prime",    name:"Prime Time",  t:[5,15,30,50], what:"Correct main card picks, not counting the main event.",
+    g:'<path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z"/>' },
+  { k:"grinder",  name:"Grinder",     t:[5,15,30,50], what:"Correct picks on the prelims and early prelims.",
+    g:'<path d="M5 6l7 4 7-4"/><path d="M5 11l7 4 7-4"/><path d="M5 16l7 4 7-4"/>' },
+  { k:"lockdown", name:"Lockdown",    t:[1,3,6,12],   what:"Locks that hit.",
+    g:'<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>' },
+  { k:"ironchin", name:"Iron Chin",   t:[2,4,8,15],   what:"Most cards played in a row.", unit:"in a row",
+    g:'<path d="M12 2.8 4.5 5.8v5.6c0 4.8 3.2 8.6 7.5 9.8 4.3-1.2 7.5-5 7.5-9.8V5.8z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>' },
+  { k:"sweep",    name:"Clean Sweep", t:[1,2,4,6],    what:"Went perfect on a card's main card, or on its prelims (early prelims included). Needs at least 3 bouts with a winner.",
+    g:'<path d="M3.5 12.5l4 4 8-9"/><path d="M11.5 15.5l1 1 8-9"/>' }
+];
+const RANKS = ["Locked","Unranked","Ranked","Contender","Champion"];
+const RANK_KEY = ["locked","unranked","ranked","contender","champion"];
+const RANK_COLOR = ["#5a606e","#8FA3BF","#D08A4E","#C7CDD6","#F2C14E"];
+// the main event: the first bout on the card that wasn't cancelled
+const mainEventOf = c => (c.fights||[]).find(f=>!isOff(f));
+const isDog = (f, side) => { const o = side==="red" ? f.oddsRed : f.oddsBlue; return o!=null && Number(o)>0; };
+function badgeCounts(uid){ return cached("badges:"+uid, ()=>{
+  const n = { sniper:0, headliner:0, prime:0, grinder:0, lockdown:0, ironchin:0, sweep:0 };
+  for(const c of S.cards){
+    if(!played(uid,c)) continue;
+    const me = mainEventOf(c), sec = { main:[], pre:[] };
+    for(const f of (c.fights||[])){
+      const side = pickOf(uid,c.id,f.id), g = grade(side, f, true);
+      if(f.seg==="main") sec.main.push({f,g}); else if(f.seg==="prelim" || f.seg==="early") sec.pre.push({f,g});
+      if(g!==1) continue;
+      if(isDog(f, side)) n.sniper++;
+      if(f===me) n.headliner++;
+      else if(f.seg==="main") n.prime++;
+      if(f.seg==="prelim" || f.seg==="early") n.grinder++;
+    }
+    const L = lockInfo(uid,c); if(L && L.hit===true) n.lockdown++;
+    for(const list of [sec.main, sec.pre]){
+      if(!list.length || !list.every(x=>x.f.res && x.f.res.w)) continue;   // the section has to be finished
+      const counted = list.filter(x=>x.g!==null);
+      if(counted.length>=3 && counted.every(x=>x.g===1)) n.sweep++;
+    }
+  }
+  // Iron Chin: longest run of cards played back to back, oldest to newest
+  let run = 0;
+  for(const c of scoredCards().slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)))){
+    run = played(uid,c) ? run+1 : 0; if(run>n.ironchin) n.ironchin = run;
+  }
+  return n;
+}); }
+function badgeState(uid, b){
+  const count = badgeCounts(uid)[b.k] || 0;
+  let lvl = 0; b.t.forEach((x,i)=>{ if(count>=x) lvl = i+1; });
+  return { b, count, lvl, next: lvl<4 ? b.t[lvl] : null };
+}
+function badgesOf(uid){ return BADGES.map(b=>badgeState(uid,b)); }
+// the 3 on a profile: the ones the player picked, or until they pick, their 3 highest
+function shownBadges(uid){
+  const all = badgesOf(uid), pick = S.profiles[uid]?.badges;
+  if(Array.isArray(pick)) return pick.map(k=>all.find(x=>x.b.k===k)).filter(Boolean).slice(0,3);
+  return all.filter(x=>x.lvl>0).sort((a,b)=>b.lvl-a.lvl || (b.count/(b.next||b.count))-(a.count/(a.next||a.count))).slice(0,3);
+}
+// the badge keys on a player's profile right now (picked, or the automatic 3)
+function pickedBadges(uid){ const p = S.profiles[uid]?.badges; return Array.isArray(p) ? p : shownBadges(uid).map(x=>x.b.k); }
+function badgeEmblem(st, cls){
+  const c = RANK_COLOR[st.lvl];
+  return `<svg class="${cls||"em"}" viewBox="0 0 48 48" aria-hidden="true" style="color:${c}"><polygon points="16,1.5 32,1.5 46.5,16 46.5,32 32,46.5 16,46.5 1.5,32 1.5,16" fill="${st.lvl===4?"#2a2212":"#0f1116"}" stroke="${c}" stroke-width="2.4"/><polygon points="17.4,5.5 30.6,5.5 42.5,17.4 42.5,30.6 30.6,42.5 17.4,42.5 5.5,30.6 5.5,17.4" fill="${c}" fill-opacity="${st.lvl?.13:.04}"/><g transform="translate(13 9.5) scale(.92)" fill="none" stroke="${c}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">${st.b.g}</g>${[0,1,2,3].map(i=>`<rect x="${14.6+i*5.2}" y="36" width="3.6" height="2.4" rx="1" fill="${c}" fill-opacity="${i<st.lvl?1:.22}"/>`).join("")}</svg>`;
+}
+function badgeTile(st, uid, extra){
+  const pct = st.next ? Math.min(100, st.count/st.next*100) : 100;
+  return `<button class="bdg ${RANK_KEY[st.lvl]}${extra||""}" data-act="badge" data-uid="${esc(uid)}" data-k="${st.b.k}" aria-label="${esc(st.b.name)}: ${RANKS[st.lvl]}, ${st.count}">${badgeEmblem(st)}<span class="nm">${esc(st.b.name)}</span><span class="tr">${RANKS[st.lvl]}</span><span class="ct">${st.count}${st.next?`/${st.next}`:""}<span class="bar"><i style="width:${pct}%"></i></span></span></button>`;
+}
+// the patch on the profile header that opens all of a player's badges
+function badgePatch(uid){
+  const all = badgesOf(uid), earned = all.filter(x=>x.lvl>0).length, top = all.slice().sort((a,b)=>b.lvl-a.lvl)[0];
+  return `<button class="bpatch r${top.lvl}" data-act="badges" data-uid="${esc(uid)}" aria-label="Badges, ${earned} of ${all.length} earned">${badgeEmblem(top,"pem")}<b>Badges</b><small>${earned}/${all.length}</small></button>`;
+}
+// bottom sheet: every badge (grid), or one badge's progress (detail)
+function badgeSheetHTML(uid, k){
+  const me = uid===S.uid, all = badgesOf(uid);
+  if(!k){
+    return `<span class="grab" aria-hidden="true"></span><div class="eshead"><h3>${me?"Your badges":esc(nameOf(uid))+"'s badges"}</h3><button type="button" class="esx" data-bs="close" aria-label="Close">×</button></div>
+      <p class="note bsnote">${me?"Tap a badge to see your progress and add up to 3 to your profile.":"Tap a badge to see what it is and their progress."}</p>
+      <div class="badges">${all.map(st=>{ const on = me && pickedBadges(uid).includes(st.b.k); return badgeTile(st, uid, on?" sel":""); }).join("")}</div>`;
+  }
+  const st = all.find(x=>x.b.k===k); if(!st) return "";
+  const picked = pickedBadges(uid), on = picked.includes(k);
+  const ladder = [0,...st.b.t].map((v,i)=>`<div class="${i===st.lvl?"on":""}" style="--t:${RANK_COLOR[i]}">${RANKS[i]}<b>${v}</b></div>`).join("");
+  const left = st.next ? st.next - st.count : 0;
+  const prog = st.lvl===4 ? `${st.count}${st.b.unit?" "+st.b.unit:""}. Champion, the top rank.` : `${st.count} so far. <b>${left} more</b> for ${RANKS[st.lvl+1]}.`;
+  let btn = "";
+  if(me){
+    const full = !on && picked.length>=3;
+    btn = `<button class="btn ${on?"ghost":"gold"}" data-bs="toggle" data-k="${k}" ${full?"disabled":""}>${on?"Remove from my profile":"Show on my profile"}</button>
+      <p class="note bsnote">${full?"You're showing 3 already. Remove one first.":`${picked.length} of 3 on your profile.`}</p>`;
+  }
+  return `<span class="grab" aria-hidden="true"></span><div class="eshead"><button type="button" class="bsback" data-bs="all">‹ All badges</button><button type="button" class="esx" data-bs="close" aria-label="Close">×</button></div>
+    <div class="bshero">${badgeEmblem(st,"bem")}<div><h3>${esc(st.b.name)}</h3><span class="tr" style="--t:${RANK_COLOR[st.lvl]}">${RANKS[st.lvl]}</span><p>${esc(st.b.what)}</p></div></div>
+    <div class="ladder">${ladder}</div><p class="bsprog">${prog}</p>${btn}`;
+}
+function openBadges(uid, k){
+  let el = document.querySelector(".badgesheet");
+  if(!el){
+    document.body.insertAdjacentHTML("beforeend", `<div class="sharesheet editsheet badgesheet" role="dialog" aria-label="Badges"><div class="esheet"></div></div>`);
+    el = document.querySelector(".badgesheet");
+    const onKey = e=>{ if(e.key==="Escape") close(); };
+    const close = ()=>{ el.remove(); document.removeEventListener("keydown", onKey); };
+    document.addEventListener("keydown", onKey);
+    el.addEventListener("click", async e=>{
+      if(e.target===el) return close();
+      const t = e.target.closest("[data-act='badge'],[data-bs]"); if(!t) return;
+      if(t.dataset.act==="badge"){ e.stopPropagation(); return show(t.dataset.k); }
+      if(t.dataset.bs==="close") return close();
+      if(t.dataset.bs==="all") return show(null);
+      if(t.dataset.bs==="toggle") toggleBadge(t.dataset.k).then(()=>show(t.dataset.k));
+    });
+  }
+  const show = key => { el.dataset.k = key||""; el.querySelector(".esheet").innerHTML = badgeSheetHTML(uid, key); };
+  show(k||null);
+}
+async function toggleBadge(k){
+  const cur = pickedBadges(S.uid);
+  const next = cur.includes(k) ? cur.filter(x=>x!==k) : [...cur, k].slice(0,3);
+  const { error } = await sb.from("profiles").update({ badges: next }).eq("id", S.uid);
+  if(error){ toast("Couldn't save your badges. Try again."); return; }
+  S.profiles[S.uid] = { ...(S.profiles[S.uid]||{id:S.uid}), badges: next }; bump(); render();
+}
+// underdog record: wins and losses on picks of the betting underdog
+function dogRecord(uid){ const U = upsetsOf(uid); return { w: U.hits.length, l: U.dogs - U.hits.length }; }
+
 function playerHTML(uid, asTab){
   const me = uid===S.uid;
   const rows = standings();
@@ -1128,23 +1262,26 @@ function playerHTML(uid, asTab){
   const pl = placeIn(rows, uid, true), champ = champs().has(uid);
   const joined = S.profiles[uid]?.created_at ? new Date(S.profiles[uid].created_at).toLocaleDateString(undefined,{month:"short",year:"numeric"}) : "";
   const metaBits = [champ?"Champ":"", pl?`${pl.tied?"T-":""}${ordinal(pl.place)} of ${pl.of}`:"Not ranked yet", joined?`Since ${joined}`:""].filter(Boolean);
-  const P = S.profiles[uid] || {}, acc = accentOf(uid);
+  const P = S.profiles[uid] || {}, acc = accentOf(uid), dr = dogRecord(uid);
   // fighter card header
   let h = `${asTab?"":`<button class="backbtn" data-act="back">‹ Leaders</button>`}
   <section class="phero${champ?" champ":""}"${acc&&!champ?` style="--pacc:${acc}"`:""}>
     ${me?`<button class="pedit" data-act="editprofile">Edit</button>`:""}
-    <div class="phtop">${avatar(uid)}<div class="phid"><h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2>${atHTML(uid,"phat")}<div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}</div></div>
-    <div class="tape"><div><b>${r.w}–${r.l}</b><span>Record</span></div><div><b>${r.w+r.l?fmtPct(r):"–"}</b><span>Win %</span></div><div class="tl"><b>${r.lw}–${r.ll}</b><span>Locks</span></div><div><b>${r.cards||0}</b><span>Cards</span></div></div>
+    <div class="phtop">${avatar(uid)}<div class="phid"><h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2>${atHTML(uid,"phat")}<div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}</div>${badgePatch(uid)}</div>
+    <div class="tape t5"><div><b>${r.w}–${r.l}</b><span>Record</span></div><div><b>${r.w+r.l?fmtPct(r):"–"}</b><span>Win %</span></div><div class="tl"><b>${r.lw}–${r.ll}</b><span>Locks</span></div><div><b>${dr.w}–${dr.l}</b><span>Dogs</span></div><div><b>${r.cards||0}</b><span>Cards</span></div></div>
   </section>`;
   // belt case
   const belts = beltList(uid);
   if(belts.length){
     h += `<div class="psec"><span>Belts</span><span>${belts.length}</span></div><div class="beltcase">${belts.map(b=>`<div class="bcase ${b.m}"><span class="belt ${b.m}${cardNumber(b.c)?" num":""}">${beltSVG(b.m, cardNumber(b.c)||"FN")}</span><b>${esc(cardNumber(b.c)?`UFC ${cardNumber(b.c)}`:"Fight Night")}</b><small>${esc([mainEvent(b.c), b.m==="silver"?"Silver":"", b.c.date?fmtDate(b.c.date).replace(/,\s*\d{4}$/,""):""].filter(Boolean).join(" · "))}</small></div>`).join("")}</div>`;
   }
+  // the badges they show off (up to 3)
+  const shown = shownBadges(uid);
+  if(shown.length) h += `<div class="psec"><span>Badges</span></div><div class="badges feat">${shown.map(st=>badgeTile(st, uid)).join("")}</div>`;
   // biggest upsets
   const U = upsetsOf(uid);
   if(U.dogs){
-    h += `<div class="psec"><span>Biggest upsets</span><span>${U.hits.length} of ${U.dogs} underdog${U.dogs===1?"":"s"} hit</span></div>`;
+    h += `<div class="psec"><span>Biggest upsets</span></div>`;
     h += U.hits.length ? `<div class="ups">${U.hits.slice(0,3).map(x=>`<div class="up"><span class="uodds">${esc(fmtOdds(x.o))}</span><span class="uwho"><b>${esc(x.win)}</b><small>over ${esc(x.over)}</small></span><span class="ucard">${esc(cardShort(x.c))}</span></div>`).join("")}</div>` : `<p class="note">No underdog picks have hit yet.</p>`;
   }
   // recent cards: record and where they finished
@@ -1661,6 +1798,8 @@ $("#app").addEventListener("click", e=>{
   if(act==="install" && deferredInstall){ deferredInstall.prompt(); deferredInstall.userChoice.finally(()=>{ deferredInstall=null; render(); }); return; }
   if(act==="page"){ openPage(b.dataset.v); return; }
   if(act==="editprofile"){ openEditProfile(); return; }
+  if(act==="badges"){ openBadges(b.dataset.uid); return; }
+  if(act==="badge"){ openBadges(b.dataset.uid, b.dataset.k); return; }
   if(act==="closepage"){ S.page=null; render(); window.scrollTo(0,0); return; }
   if(act==="theme"){ setTheme(b.dataset.v); return; }
   if(act==="bview"){ S.boardView=b.dataset.v; render(); return; }
