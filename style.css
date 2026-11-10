@@ -757,11 +757,17 @@ button.bcase{font:inherit;color:inherit;cursor:pointer;width:100%}
 .setmet b{white-space:normal;overflow-wrap:anywhere}
 
 /* badges: a patch on the profile header, up to 3 shown under the belts, and a Badges screen */
-.bpatch{appearance:none;margin-left:auto;flex:0 0 auto;align-self:center;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 6px 5px;border-radius:12px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.14);color:#ECEEF3;cursor:pointer;font-family:var(--f-label)}
-.bpatch .pem{width:30px;height:30px;display:block}
-.bpatch b{font-weight:700;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;line-height:1}
-.bpatch small{font-weight:700;font-size:9.5px;letter-spacing:.06em;color:var(--muted);line-height:1}
-.bpatch.r4 .pem{filter:drop-shadow(0 0 6px rgba(255,194,61,.45))}
+/* the badge on the corner of the profile picture: opens the Badges screen */
+.avwrap{position:relative;flex:0 0 auto;display:block}
+.bpatch{appearance:none;position:absolute;right:-10px;bottom:-8px;width:40px;height:40px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;transition:transform .15s ease}
+.bpatch:active{transform:scale(.92)}
+.bpatch::before{content:"";position:absolute;inset:-8px}
+.bpatch .pem{width:40px;height:40px;display:block;filter:drop-shadow(0 2px 5px rgba(0,0,0,.7))}
+.bpatch.r4 .pem{filter:drop-shadow(0 2px 5px rgba(0,0,0,.7)) drop-shadow(0 0 6px rgba(255,194,61,.5))}
+.bpn{position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);padding:1px 6px;border-radius:999px;background:#FFC23D;color:#15171c;font-family:var(--f-label);font-weight:800;font-size:10px;letter-spacing:.04em;line-height:1.35;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.bpatch.nudge .pem{animation:fwNudge 2.4s ease-in-out infinite}
+@keyframes fwNudge{0%,100%{filter:drop-shadow(0 2px 5px rgba(0,0,0,.7)) drop-shadow(0 0 0 rgba(255,194,61,0));transform:scale(1)}50%{filter:drop-shadow(0 2px 5px rgba(0,0,0,.7)) drop-shadow(0 0 9px rgba(255,194,61,.85));transform:scale(1.08)}}
+@media (prefers-reduced-motion:reduce){.bpatch.nudge .pem{animation:none}}
 .badges{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .bdg{appearance:none;font:inherit;color:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 4px 9px;border-radius:12px;background:#171a21;border:1px solid #2C303A;text-align:center;min-width:0}
 .bdg .em{width:34px;height:34px;flex:0 0 auto}

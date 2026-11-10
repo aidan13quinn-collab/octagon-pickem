@@ -1200,7 +1200,8 @@ function badgeTile(st, uid){
 // the patch on the profile header that opens all of a player's badges
 function badgePatch(uid){
   const all = badgesOf(uid), earned = all.filter(x=>x.lvl>0).length, top = all.slice().sort((a,b)=>b.lvl-a.lvl)[0];
-  return `<button class="bpatch r${top.lvl}" data-act="badges" data-uid="${esc(uid)}" aria-label="Badges, ${earned} of ${all.length} earned">${badgeEmblem(top,"pem")}<b>Badges</b><small>${earned}/${all.length}</small></button>`;
+  let seen = false; try{ seen = localStorage.getItem("fw-badges-seen")==="1"; }catch(e){}
+  return `<button class="bpatch r${top.lvl}${seen?"":" nudge"}" data-act="badges" data-uid="${esc(uid)}" aria-label="Badges, ${earned} of ${all.length} earned">${badgeEmblem(top,"pem")}<span class="bpn">${earned}/${all.length}</span></button>`;
 }
 // the Badges screen: every badge as a row; tap one to open its ranks and progress
 function badgesPageHTML(uid){
@@ -1226,7 +1227,7 @@ function badgesPageHTML(uid){
   }
   return h + `</div>`;
 }
-function openBadges(uid, k){ tabScroll[S.tab]=window.scrollY; S.badgesUid = uid; S.badgeOpen = k || null; render(); window.scrollTo(0,0); }
+function openBadges(uid, k){ try{ localStorage.setItem("fw-badges-seen","1"); }catch(e){} tabScroll[S.tab]=window.scrollY; S.badgesUid = uid; S.badgeOpen = k || null; render(); window.scrollTo(0,0); }
 async function toggleBadge(k){
   const cur = pickedBadges(S.uid);
   const next = cur.includes(k) ? cur.filter(x=>x!==k) : [...cur, k].slice(0,3);
@@ -1249,7 +1250,7 @@ function playerHTML(uid, asTab){
   let h = `${asTab?"":`<button class="backbtn" data-act="back">‹ Leaders</button>`}
   <section class="phero${champ?" champ":""}"${acc&&!champ?` style="--pacc:${acc}"`:""}>
     ${me?`<button class="pedit" data-act="editprofile">Edit</button>`:""}
-    <div class="phtop">${avatar(uid)}<div class="phid"><h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2>${atHTML(uid,"phat")}<div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}</div>${badgePatch(uid)}</div>
+    <div class="phtop"><span class="avwrap">${avatar(uid)}${badgePatch(uid)}</span><div class="phid"><h2>${commish(uid)}${nameHTML(uid)}${me?` <span class="pyou">You</span>`:""}</h2>${atHTML(uid,"phat")}<div class="phmeta">${flagImg(P.flag)}${metaBits.map(esc).join(" · ")}</div>${P.fav_fighter?`<div class="phfav">Favorite fighter: <b>${esc(P.fav_fighter)}</b></div>`:""}</div></div>
     <div class="tape t5"><div><b>${r.w}–${r.l}</b><span>Record</span></div><div><b>${r.w+r.l?fmtPct(r):"–"}</b><span>Win %</span></div><div class="tl"><b>${r.lw}–${r.ll}</b><span>Locks</span></div><div><b>${dr.w}–${dr.l}</b><span>Dogs</span></div><div><b>${r.cards||0}</b><span>Cards</span></div></div>
   </section>`;
   // belt case
