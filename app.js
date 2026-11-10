@@ -939,7 +939,8 @@ function weekStandings(c){ return cached("week:"+c.id, ()=>{
     return { id, w:r.w, l:r.l, lw:L&&L.hit===true?1:0, ll:(L&&L.hit===false)||lockMissed(id,c)?1:0, picked:(c.fights||[]).some(f=>pickOf(id,c.id,f.id)) };
   }).filter(r=>r.w+r.l>0 || r.picked);
   const top = cardChamps(c);
-  rows.forEach(r=>{ r.champ = top.has(r.id); });
+  const P = top.size ? cardPodium(c) : null, n = cardNumber(c);
+  rows.forEach(r=>{ r.champ = top.has(r.id); const m = P && (P.ids.has(r.id) ? "gold" : P.silver.has(r.id) ? "silver" : null); r.belt = m ? `<span class="belts"><span class="belt ${m}${n?" num":""}">${beltSVG(m, n||"FN")}</span></span>` : ""; });
   rows.sort((a,b)=>(b.champ-a.champ) || b.w-a.w || a.l-b.l || b.lw-a.lw || a.ll-b.ll || nameOf(a.id).localeCompare(nameOf(b.id)));
   return rows;
 }); }
@@ -961,7 +962,7 @@ function boardTable(rows, showLock, allTime){
     const tier = unranked || !counted ? "" : place===1 ? "g" : place===2 ? "s" : place===3 ? "b3" : "";
     const rk = unranked ? "–" : `${tied?'<small>T</small>':""}${place}`;
     const gold = allTime ? undefined : !!r.champ;
-    const under = allTime ? `<span class="lbsub">${crown(r.id) || `${r.cards} ${r.cards===1?"card":"cards"}`}</span>` : (showLock ? `<span class="lbsub">${lockTag(r.id,true)}</span>` : "");
+    const under = allTime ? `<span class="lbsub">${crown(r.id) || `${r.cards} ${r.cards===1?"card":"cards"}`}</span>` : (showLock ? `<span class="lbsub">${r.belt||""}${lockTag(r.id,true)}</span>` : "");
     const row = `<span class="lboct">${rk}</span>
       <span class="lbwho"><b>${commish(r.id)}${nameHTML(r.id, gold)}</b>${under}</span>
       <span class="lbrec">${r.w}–${r.l}${allTime?`<small>${fmtPct(r)}</small>`:""}</span>
@@ -987,8 +988,8 @@ function boardHTML(){
     h += `<div class="cardpick"><div class="event-head"><h2>${esc(cc.name)}</h2>${cc.date?`<span class="label">${esc(fmtDate(cc.date))}</span>`:""}${rows.length?`<span class="label">${rows.length} ${rows.length===1?"player":"players"}</span>`:""}</div>${cardSelect()}</div>`;
     if(!rows.length) return h + emptyHTML("No picks on this card yet","Rankings for this card show up once people make their picks.");
     if(!graded) h += `<p class="note">No results yet. Rankings fill in as the fights finish.</p>`;
-    h += boardTable(rows, true);
     h += weekBeltsHTML(cc);
+    h += boardTable(rows, true);
     h += `<p class="note">Rankings for this card only. Tap a name to see their picks. Ties go to fewer misses, then the lock.</p>`;
     return h;
   }
