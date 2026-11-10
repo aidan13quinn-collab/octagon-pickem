@@ -1198,10 +1198,12 @@ function badgeTile(st, uid){
   return `<button class="bdg ${RANK_KEY[st.lvl]}" style="--t:${RANK_COLOR[st.lvl]}" data-act="badge" data-uid="${esc(uid)}" data-k="${st.b.k}" aria-label="${esc(st.b.name)}: ${RANKS[st.lvl]}">${badgeEmblem(st)}<span class="nm">${esc(st.b.name)}</span><span class="tr">${RANKS[st.lvl]}</span></button>`;
 }
 // the patch on the profile header that opens all of a player's badges
+// the same badge icon for everyone (a medal on an octagon), with how many badges they've earned
+const PATCH_SVG = `<svg class="pem" viewBox="0 0 48 48" aria-hidden="true"><polygon points="16,1.5 32,1.5 46.5,16 46.5,32 32,46.5 16,46.5 1.5,32 1.5,16" fill="#1a1710" stroke="#FFC23D" stroke-width="2.4"/><polygon points="17.4,5.5 30.6,5.5 42.5,17.4 42.5,30.6 30.6,42.5 17.4,42.5 5.5,30.6 5.5,17.4" fill="#FFC23D" fill-opacity=".12"/><g fill="none" stroke="#FFC23D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9.5l3.6 8.5M30 9.5l-3.6 8.5"/><circle cx="24" cy="26" r="8"/></g><path d="M24 21.2l1.5 3 3.3.5-2.4 2.3.6 3.3-3-1.6-3 1.6.6-3.3-2.4-2.3 3.3-.5z" fill="#FFC23D"/></svg>`;
 function badgePatch(uid){
-  const all = badgesOf(uid), earned = all.filter(x=>x.lvl>0).length, top = all.slice().sort((a,b)=>b.lvl-a.lvl)[0];
+  const all = badgesOf(uid), earned = all.filter(x=>x.lvl>0).length;
   let seen = false; try{ seen = localStorage.getItem("fw-badges-seen")==="1"; }catch(e){}
-  return `<button class="bpatch r${top.lvl}${seen?"":" nudge"}" data-act="badges" data-uid="${esc(uid)}" aria-label="Badges, ${earned} of ${all.length} earned">${badgeEmblem(top,"pem")}<span class="bpn">${earned}/${all.length}</span></button>`;
+  return `<button class="bpatch${seen?"":" nudge"}" data-act="badges" data-uid="${esc(uid)}" aria-label="Badges, ${earned} of ${all.length} earned">${PATCH_SVG}<span class="bpn">${earned}/${all.length}</span></button>`;
 }
 // the Badges screen: every badge as a row; tap one to open its ranks and progress
 function badgesPageHTML(uid){
