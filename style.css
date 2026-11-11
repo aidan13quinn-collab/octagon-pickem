@@ -830,9 +830,6 @@ button.bcase{font:inherit;color:inherit;cursor:pointer;width:100%}
 .phero ~ .beltcase .bcase small{font-size:11px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .phero ~ .badges .bdg{background:none;border:0;padding:4px 2px}
 .phero ~ .badges .bdg .em{width:40px;height:40px}
-.phero ~ .ups{gap:0}
-.phero ~ .ups .up{background:none;border:0;border-radius:0;border-bottom:1px solid #23262e;padding:10px 0}
-.phero ~ .ups .up:last-child{border-bottom:0}
 .phero ~ .pform{gap:0}
 .phero ~ .pform span{background:none;border:0;border-radius:0;border-left:1px solid #23262e;padding:4px}
 .phero ~ .pform span:first-child{border-left:0}
@@ -841,11 +838,10 @@ button.bcase{font:inherit;color:inherit;cursor:pointer;width:100%}
 .phero ~ .cardhist .ch.on{border-color:var(--ink);background:rgba(255,255,255,.04)}
 .phero ~ .plist{background:none;border:0;border-radius:0;padding:0}
 .phero + .psec{border-top:0;padding-top:4px}
-/* biggest upset on a profile: the top one keeps a glowing border */
-.phero ~ .ups .up:first-child{border:1px solid rgba(46,229,138,.45);border-radius:12px;padding:10px 12px;margin-bottom:4px;background:linear-gradient(90deg,rgba(46,229,138,.12),rgba(46,229,138,.02));box-shadow:0 0 14px rgba(46,229,138,.15)}
+/* biggest upsets on a profile: every one keeps its green border and glow */
+.phero ~ .ups .up{box-shadow:0 0 14px rgba(46,229,138,.12)}
 /* recent cards: one strip with a red-gold-blue corner border */
 .phero ~ .pform{border:1.5px solid transparent;border-radius:14px;padding:8px 4px;background:linear-gradient(#15171d,#15171d) padding-box,linear-gradient(90deg,var(--red),#FFC23D 50%,var(--blue)) border-box;box-shadow:0 0 16px rgba(255,194,61,.08)}
-.phero ~ .ups .up{padding-left:12px;padding-right:12px}
 /* the 3 badges on a profile sit between two thin gold lines that fade out at the ends (a frame, not a box) */
 .phero ~ .badges{position:relative;padding:12px 0}
 .phero ~ .badges::before,.phero ~ .badges::after{content:"";position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,194,61,.55) 20%,rgba(255,194,61,.55) 80%,transparent)}
