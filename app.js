@@ -1195,7 +1195,7 @@ function badgeEmblem(st, cls){
   return `<svg class="${cls||"em"}" viewBox="0 0 48 48" aria-hidden="true" style="color:${c}"><polygon points="16,1.5 32,1.5 46.5,16 46.5,32 32,46.5 16,46.5 1.5,32 1.5,16" fill="${st.lvl===4?"#2a2212":"#0f1116"}" stroke="${c}" stroke-width="2.4"/><polygon points="17.4,5.5 30.6,5.5 42.5,17.4 42.5,30.6 30.6,42.5 17.4,42.5 5.5,30.6 5.5,17.4" fill="${c}" fill-opacity="${st.lvl?.13:.04}"/><g transform="translate(13 9.5) scale(.92)" fill="none" stroke="${c}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">${st.b.g}</g>${[0,1,2,3].map(i=>`<rect x="${14.6+i*5.2}" y="36" width="3.6" height="2.4" rx="1" fill="${c}" fill-opacity="${i<st.lvl?1:.22}"/>`).join("")}</svg>`;
 }
 function badgeTile(st, uid){
-  return `<button class="bdg ${RANK_KEY[st.lvl]}" style="--t:${RANK_COLOR[st.lvl]}" data-act="badge" data-uid="${esc(uid)}" data-k="${st.b.k}" aria-label="${esc(st.b.name)}: ${RANKS[st.lvl]}">${badgeEmblem(st)}<span class="nm">${esc(st.b.name)}</span><span class="tr">${RANKS[st.lvl]}</span></button>`;
+  return `<button class="bdg ${RANK_KEY[st.lvl]}" style="--t:${RANK_COLOR[st.lvl]}" data-act="badgepop" data-uid="${esc(uid)}" data-k="${st.b.k}" aria-label="${esc(st.b.name)}: ${RANKS[st.lvl]}">${badgeEmblem(st)}<span class="nm">${esc(st.b.name)}</span><span class="tr">${RANKS[st.lvl]}</span></button>`;
 }
 // the patch on the profile header that opens all of a player's badges
 // the same badge icon for everyone (a medal on an octagon), with how many badges they've earned
@@ -1230,6 +1230,29 @@ function badgesPageHTML(uid){
   return h + `</div>`;
 }
 function openBadges(uid, k){ try{ localStorage.setItem("fw-badges-seen","1"); }catch(e){} tabScroll[S.tab]=window.scrollY; S.badgesUid = uid; S.badgeOpen = k || null; render(); window.scrollTo(0,0); }
+// quick card for one badge: what it is and this player's progress, right on the profile
+function openBadgePop(uid, k){
+  const st = badgesOf(uid).find(x=>x.b.k===k); if(!st) return;
+  document.querySelector(".bpop")?.remove();
+  const c = RANK_COLOR[st.lvl], pct = st.next ? Math.min(100, st.count/st.next*100) : 100;
+  const who = uid===S.uid ? "You have" : `${esc(nameOf(uid))} has`;
+  const prog = st.next ? `${who} <b>${st.count}</b>. ${st.next-st.count} more for ${RANKS[st.lvl+1]}.` : `${who} <b>${st.count}</b>${st.b.unit?" "+st.b.unit:""}. That's the top rank.`;
+  document.body.insertAdjacentHTML("beforeend", `<div class="bpop" role="dialog" aria-label="${esc(st.b.name)}"><div class="bpcard" style="--t:${c}">
+    <div class="bphead">${badgeEmblem(st,"bem")}<div><h3>${esc(st.b.name)}</h3><span class="bprank">${RANKS[st.lvl]}</span></div><button class="esx" data-bp="close" aria-label="Close">×</button></div>
+    <p class="bpwhat">${esc(st.b.what)}</p>
+    <div class="bpbar"><i style="width:${pct}%"></i></div>
+    <div class="bpsteps">${st.b.t.map((v,i)=>`<span class="${st.lvl>i?"done":""}" style="--t:${RANK_COLOR[i+1]}"><b>${v}</b>${RANKS[i+1]}</span>`).join("")}</div>
+    <p class="bpprog">${prog}</p>
+    <button class="bpall" data-bp="all">All badges ›</button></div></div>`);
+  const el = document.querySelector(".bpop");
+  const close = ()=>{ el.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e=>{ if(e.key==="Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  el.addEventListener("click", e=>{
+    if(e.target===el || e.target.closest("[data-bp=close]")) return close();
+    if(e.target.closest("[data-bp=all]")){ close(); openBadges(uid, k); }
+  });
+}
 async function toggleBadge(k){
   const cur = pickedBadges(S.uid);
   const next = cur.includes(k) ? cur.filter(x=>x!==k) : [...cur, k].slice(0,3);
@@ -1785,6 +1808,7 @@ $("#app").addEventListener("click", e=>{
   if(act==="editprofile"){ openEditProfile(); return; }
   if(act==="badges"){ openBadges(b.dataset.uid); return; }
   if(act==="badge"){ openBadges(b.dataset.uid, b.dataset.k); return; }
+  if(act==="badgepop"){ openBadgePop(b.dataset.uid, b.dataset.k); return; }
   if(act==="badgesback"){ S.badgesUid=null; S.badgeOpen=null; render(); window.scrollTo(0, tabScroll[S.tab]||0); return; }
   if(act==="badgeopen"){ S.badgeOpen = S.badgeOpen===b.dataset.k ? null : b.dataset.k; render(); return; }
   if(act==="badgepin"){ toggleBadge(b.dataset.k); return; }

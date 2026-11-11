@@ -799,3 +799,45 @@ button.bcase{font:inherit;color:inherit;cursor:pointer;width:100%}
 .bpin:disabled{opacity:.45;cursor:default;color:var(--muted);border-color:#2C303A}
 .tape.t5{grid-template-columns:1.15fr 1fr 1fr 1fr .75fr}
 .tape.t5 b{font-size:19px}.tape.t5 span{font-size:10px;letter-spacing:.1em}.tape.t5 div{padding:10px 7px}
+
+/* quick card when you tap a badge on a profile */
+.bpop{position:fixed;inset:0;z-index:60;background:rgba(8,9,12,.55);display:flex;align-items:flex-end;justify-content:center;padding:16px 16px calc(96px + env(safe-area-inset-bottom,0px));animation:fwFade .15s ease-out}
+.bpcard{width:100%;max-width:420px;background:#1A1D24;border:1px solid color-mix(in srgb,var(--t) 40%,#2C303A);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.5);animation:fwRise .18s ease-out}
+.bphead{display:flex;align-items:center;gap:12px}
+.bphead .bem{width:52px;height:52px;flex:0 0 auto}
+.bphead div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.bphead h3{margin:0;font-family:var(--f-display);font-weight:900;font-size:26px;line-height:1;text-transform:uppercase}
+.bprank{font-family:var(--f-label);font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--t)}
+.bpwhat{margin:0;color:var(--muted);font-size:14px}
+.bpbar{height:5px;border-radius:3px;background:#2C303A;overflow:hidden}.bpbar i{display:block;height:100%;background:var(--t);border-radius:3px}
+.bpsteps{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.bpsteps span{display:flex;flex-direction:column;align-items:center;gap:1px;font-family:var(--f-label);font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);opacity:.55}
+.bpsteps span b{font-size:15px;color:var(--t);letter-spacing:0}
+.bpsteps span.done{opacity:1;color:var(--ink)}
+.bpprog{margin:0;font-size:14px;color:var(--muted)}.bpprog b{color:var(--ink)}
+.bpall{appearance:none;align-self:flex-start;background:none;border:0;padding:2px 0;font-family:var(--f-label);font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:#FFC23D;cursor:pointer}
+@keyframes fwFade{from{opacity:0}}
+@keyframes fwRise{from{transform:translateY(14px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.bpop,.bpcard{animation:none}}
+
+/* profile: lighter, more open sections (no box around every item) */
+.phero ~ .psec{border-top:1px solid #23262e;padding-top:16px;margin-top:2px}
+.phero ~ .beltcase{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -4px;padding:2px 4px}
+.phero ~ .beltcase::-webkit-scrollbar{display:none}
+.phero ~ .beltcase .bcase{flex:0 0 auto;width:112px;background:none;border:0;padding:4px 0;gap:4px}
+.phero ~ .beltcase .bcase .belt svg{width:92px;height:46px}
+.phero ~ .beltcase .bcase b{font-size:13px}
+.phero ~ .beltcase .bcase small{font-size:11px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.phero ~ .badges .bdg{background:none;border:0;padding:4px 2px}
+.phero ~ .badges .bdg .em{width:40px;height:40px}
+.phero ~ .ups{gap:0}
+.phero ~ .ups .up{background:none;border:0;border-radius:0;border-bottom:1px solid #23262e;padding:10px 0}
+.phero ~ .ups .up:last-child{border-bottom:0}
+.phero ~ .pform{gap:0}
+.phero ~ .pform span{background:none;border:0;border-radius:0;border-left:1px solid #23262e;padding:4px}
+.phero ~ .pform span:first-child{border-left:0}
+.phero ~ .pform .win b{color:var(--hot-gold)}
+.phero ~ .cardhist .ch{border-radius:999px;padding:6px 14px;background:none;border-color:#2C303A}
+.phero ~ .cardhist .ch.on{border-color:var(--ink);background:rgba(255,255,255,.04)}
+.phero ~ .plist{background:none;border:0;border-radius:0;padding:0}
+.phero + .psec{border-top:0;padding-top:4px}
