@@ -841,3 +841,8 @@ button.bcase{font:inherit;color:inherit;cursor:pointer;width:100%}
 .phero ~ .cardhist .ch.on{border-color:var(--ink);background:rgba(255,255,255,.04)}
 .phero ~ .plist{background:none;border:0;border-radius:0;padding:0}
 .phero + .psec{border-top:0;padding-top:4px}
+/* biggest upset on a profile: the top one keeps a glowing border */
+.phero ~ .ups .up:first-child{border:1px solid rgba(46,229,138,.45);border-radius:12px;padding:10px 12px;margin-bottom:4px;background:linear-gradient(90deg,rgba(46,229,138,.12),rgba(46,229,138,.02));box-shadow:0 0 14px rgba(46,229,138,.15)}
+/* recent cards: one strip with a red-gold-blue corner border */
+.phero ~ .pform{border:1.5px solid transparent;border-radius:14px;padding:8px 4px;background:linear-gradient(#15171d,#15171d) padding-box,linear-gradient(90deg,var(--red),#FFC23D 50%,var(--blue)) border-box;box-shadow:0 0 16px rgba(255,194,61,.08)}
+.phero ~ .ups .up{padding-left:12px;padding-right:12px}
