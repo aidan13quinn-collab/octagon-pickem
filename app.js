@@ -1352,8 +1352,8 @@ function loadImg(src){ return new Promise(res=>{ if(!src) return res(null); cons
 async function buildShareImage(uid, c, withPhotos){
   const W=1080, H=1920, X=44;
   const cv=document.createElement("canvas"); cv.width=W; cv.height=H; const g=cv.getContext("2d");
-  const DISP='"Big Shoulders Display","Arial Narrow",Impact,sans-serif', LAB='"Barlow Condensed","Arial Narrow",sans-serif', BODY='Barlow,system-ui,sans-serif';
-  try{ await Promise.all(['900 80px "Big Shoulders Display"','700 30px "Barlow Condensed"','600 30px Barlow','500 30px Barlow'].map(f=>document.fonts.load(f))); }catch(e){}
+  const DISP='"Barlow Condensed","Arial Narrow",sans-serif', LAB='"Barlow Condensed","Arial Narrow",sans-serif', BODY='Barlow,system-ui,sans-serif';
+  try{ await Promise.all(['900 80px "Barlow Condensed"','700 30px "Barlow Condensed"','600 30px Barlow','500 30px Barlow'].map(f=>document.fonts.load(f))); }catch(e){}
   const C={bg:"#111318",panel:"#1A1D24",line:"#2C303A",ink:"#ECEEF3",muted:"#9AA0AE",dim:"#5B606C",gold:"#E0B154",red:"#F0566A",blue:"#6E95F0"};
   const rr=(x,y,w,h,r)=>{ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); };
   const fit=(txt,font,size,max)=>{ let s=size; do{ g.font=font.replace("$",s); if(g.measureText(txt).width<=max) break; s-=2; }while(s>12); return s; };

@@ -4,7 +4,7 @@
   --red:#C21F32; --red-soft:#F8E1E4; --blue:#2350B8; --blue-soft:#E0E8F9;
   --silver:#7D8693; --gold:#A87A1F; --gold-soft:#F4EAD3; --good:#1E7A47; --bad:#B42318;
   --band:#15171C; --band-ink:#F2F3F6;
-  --f-display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-label:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
 }
@@ -420,7 +420,7 @@ header.band .wrap{display:flex;align-items:center;justify-content:space-between;
 @media (display-mode: standalone){ header.band{padding-top:calc(8px + env(safe-area-inset-top,0px))} }
 
 /* ---------- picks tab top: broadcast scorebug ---------- */
-:root{--f-bug:Oswald,"Arial Narrow",sans-serif;--hot-red:#FF3B4E;--hot-blue:#3D8BFF;--hot-gold:#FFC23D}
+:root{--f-bug:"Barlow Condensed","Arial Narrow",sans-serif;--hot-red:#FF3B4E;--hot-blue:#3D8BFF;--hot-gold:#FFC23D}
 .ptop{display:flex;flex-direction:column;gap:12px;margin-bottom:6px}
 .pline{display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:var(--f-bug);font-weight:500;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .pline .crec b{color:var(--ink);font-weight:600}
@@ -846,3 +846,7 @@ button.bcase{font:inherit;color:inherit;cursor:pointer;width:100%}
 /* recent cards: one strip with a red-gold-blue corner border */
 .phero ~ .pform{border:1.5px solid transparent;border-radius:14px;padding:8px 4px;background:linear-gradient(#15171d,#15171d) padding-box,linear-gradient(90deg,var(--red),#FFC23D 50%,var(--blue)) border-box;box-shadow:0 0 16px rgba(255,194,61,.08)}
 .phero ~ .ups .up{padding-left:12px;padding-right:12px}
+/* the 3 badges on a profile sit between two thin gold lines that fade out at the ends (a frame, not a box) */
+.phero ~ .badges{position:relative;padding:12px 0}
+.phero ~ .badges::before,.phero ~ .badges::after{content:"";position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,194,61,.55) 20%,rgba(255,194,61,.55) 80%,transparent)}
+.phero ~ .badges::before{top:0}.phero ~ .badges::after{bottom:0}
